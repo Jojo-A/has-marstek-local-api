@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 import logging
+import time
 from typing import Any
 
 from .pymarstek import MarstekUDPClient
@@ -18,9 +19,13 @@ from .const import DEFAULT_UDP_PORT, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# Polling interval - must be longer than the total request time
-# (ES.GetMode + 10s delay + PV.GetStatus + processing ≈ 15-20s)
-SCAN_INTERVAL = timedelta(seconds=30)
+# Polling intervals for different data types
+# Fast: Real-time power data (ES.GetMode, ES.GetStatus, EM.GetStatus)
+# Medium: PV data - changes with sun but less critical
+# Slow: WiFi and battery details - rarely change
+SCAN_INTERVAL = timedelta(seconds=30)  # Base interval for fast data
+MEDIUM_POLL_INTERVAL = 60  # PV status every 60 seconds
+SLOW_POLL_INTERVAL = 300  # WiFi and battery details every 5 minutes
 
 
 class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -38,6 +43,11 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.config_entry = config_entry
         # Use initial IP, but will read from config_entry.data dynamically
         self._initial_device_ip = device_ip
+        
+        # Track last fetch times for tiered polling
+        self._last_pv_fetch: float = 0.0  # Medium interval
+        self._last_slow_fetch: float = 0.0  # Slow interval (WiFi, battery details)
+        
         super().__init__(
             hass,
             _LOGGER,
@@ -46,9 +56,11 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             config_entry=config_entry,
         )
         _LOGGER.debug(
-            "Device %s polling coordinator started, interval: %ss",
+            "Device %s polling coordinator started, interval: %ss (fast), %ss (medium/PV), %ss (slow/WiFi+Bat)",
             device_ip,
             SCAN_INTERVAL.total_seconds(),
+            MEDIUM_POLL_INTERVAL,
+            SLOW_POLL_INTERVAL,
         )
 
         # Register listener to update entity names when config entry changes
@@ -64,7 +76,13 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return self._initial_device_ip
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """Fetch all data using library's get_device_status method."""
+        """Fetch data using library's get_device_status method with tiered polling.
+        
+        Tiered polling intervals:
+        - Fast (every poll): ES.GetMode, ES.GetStatus, EM.GetStatus - real-time power
+        - Medium (60s): PV.GetStatus - solar data
+        - Slow (5min): Wifi.GetStatus, Bat.GetStatus - rarely changes
+        """
         current_ip = self.device_ip
         _LOGGER.debug("Start polling device: %s", current_ip)
 
@@ -72,38 +90,52 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.debug("Polling paused for device: %s, skipping update", current_ip)
             return self.data or {}
 
+        # Determine which data types to fetch based on elapsed time
+        current_time = time.monotonic()
+        
+        # PV data - medium interval (60s)
+        include_pv = (current_time - self._last_pv_fetch) >= MEDIUM_POLL_INTERVAL
+        
+        # WiFi and battery details - slow interval (5 min)
+        include_slow = (current_time - self._last_slow_fetch) >= SLOW_POLL_INTERVAL
+        
+        _LOGGER.debug(
+            "Polling tiers for %s: fast=always, pv=%s, wifi/bat=%s",
+            current_ip,
+            include_pv,
+            include_slow,
+        )
+
         try:
-            # Use library method to get complete device status
-            # Note: get_device_status catches exceptions internally and returns default values
-            # So we need to check the returned data to detect failures
+            # Use library method to get device status
+            # Pass flags to control which data types to fetch
             # Device requires ~10s between requests for stability
-            # Pass previous data to preserve values when individual requests fail
             device_status = await self.udp_client.get_device_status(
                 current_ip,
                 port=DEFAULT_UDP_PORT,
-                timeout=10.0,  # Increased timeout for device status requests
-                include_pv=True,
-                delay_between_requests=10.0,  # Device needs longer delay for stability
+                timeout=10.0,
+                include_pv=include_pv,
+                include_wifi=include_slow,
+                include_em=True,  # Always fetch - fast tier
+                include_bat=include_slow,
+                delay_between_requests=10.0,
                 previous_status=self.data,  # Preserve values on partial failures
             )
 
+            # Update last fetch times for successful fetches
+            if include_pv:
+                self._last_pv_fetch = current_time
+            if include_slow:
+                self._last_slow_fetch = current_time
+
             # Check if we actually got valid data
-            # get_device_status doesn't throw exceptions, it returns default values on failure
-            # Default values when both requests fail: device_mode="Unknown", battery_soc=0, battery_power=0
-            # We check device_mode because it's the most reliable indicator:
-            # - If ES.GetMode succeeds, device_mode will be a real value (not "Unknown")
-            # - If ES.GetMode fails, device_mode will be "Unknown" (default)
             device_mode = device_status.get("device_mode", "Unknown")
             battery_soc = device_status.get("battery_soc", 0)
             battery_power = device_status.get("battery_power", 0)
 
-            # If device_mode is "Unknown", ES.GetMode definitely failed
-            # This means we got no valid data from the device
             has_valid_data = device_mode != "Unknown"
 
             if not has_valid_data:
-                # ES.GetMode failed (device_mode is default "Unknown")
-                # This indicates connection failure - treat as exception
                 _LOGGER.warning(
                     "No valid data received from device at %s (device_mode=Unknown, soc=%s, power=%s) - connection failed",
                     current_ip,
@@ -111,15 +143,16 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     battery_power,
                 )
                 error_msg = f"No valid data received from device at {current_ip}"
-                # Raise will be caught by outer except block
                 raise TimeoutError(error_msg) from None  # noqa: TRY301
             _LOGGER.debug(
-                "Device %s poll done: SOC %s%%, Power %sW, Mode %s, Status %s",
+                "Device %s poll done: SOC %s%%, Power %sW, Mode %s, Status %s (pv=%s, slow=%s)",
                 current_ip,
                 device_status.get("battery_soc"),
                 device_status.get("battery_power"),
                 device_status.get("device_mode"),
                 device_status.get("battery_status"),
+                include_pv,
+                include_slow,
             )
 
             return device_status  # noqa: TRY300

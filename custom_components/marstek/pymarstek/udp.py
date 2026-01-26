@@ -367,13 +367,17 @@ class MarstekUDPClient:
         em_status_data: dict[str, Any] | None = None
         bat_status_data: dict[str, Any] | None = None
         
-        # Get ES mode (device_mode, ongrid_power)
+        # Track if we've made a request (to know when to add delay)
+        made_request = False
+        
+        # Get ES mode (device_mode, ongrid_power) - always fetched (fast tier)
         try:
             es_mode_command = get_es_mode(0)
             es_mode_response = await self.send_request(
                 es_mode_command, device_ip, port, timeout=timeout
             )
             es_mode_data = parse_es_mode_response(es_mode_response)
+            made_request = True
             _LOGGER.debug(
                 "ES.GetMode parsed for %s: Mode=%s, GridPower=%sW",
                 device_ip,
@@ -383,14 +387,16 @@ class MarstekUDPClient:
         except (TimeoutError, OSError, ValueError) as err:
             _LOGGER.debug("ES.GetMode failed for %s: %s", device_ip, err)
         
-        # Get ES status (battery_power, battery_status) - most accurate battery data
-        await asyncio.sleep(delay_between_requests)
+        # Get ES status (battery_power, battery_status) - always fetched (fast tier)
+        if made_request:
+            await asyncio.sleep(delay_between_requests)
         try:
             es_status_command = get_es_status(0)
             es_status_response = await self.send_request(
                 es_status_command, device_ip, port, timeout=timeout
             )
             es_status_data = parse_es_status_response(es_status_response)
+            made_request = True
             _LOGGER.debug(
                 "ES.GetStatus parsed for %s: SOC=%s%%, BattPower=%sW, Status=%s",
                 device_ip,
@@ -401,15 +407,37 @@ class MarstekUDPClient:
         except (TimeoutError, OSError, ValueError) as err:
             _LOGGER.debug("ES.GetStatus failed for %s: %s", device_ip, err)
         
-        # Get PV status if requested
+        # Get EM status (CT/energy meter) - always fetched (fast tier)
+        if include_em:
+            if made_request:
+                await asyncio.sleep(delay_between_requests)
+            try:
+                em_status_command = get_em_status(0)
+                em_status_response = await self.send_request(
+                    em_status_command, device_ip, port, timeout=timeout
+                )
+                em_status_data = parse_em_status_response(em_status_response)
+                made_request = True
+                _LOGGER.debug(
+                    "EM.GetStatus parsed for %s: CT=%s, TotalPower=%sW",
+                    device_ip,
+                    "Connected" if em_status_data.get("ct_connected") else "Not connected",
+                    em_status_data.get("em_total_power"),
+                )
+            except (TimeoutError, OSError, ValueError) as err:
+                _LOGGER.debug("EM.GetStatus failed for %s: %s", device_ip, err)
+        
+        # Get PV status if requested (medium tier)
         if include_pv:
-            await asyncio.sleep(delay_between_requests)
+            if made_request:
+                await asyncio.sleep(delay_between_requests)
             try:
                 pv_status_command = get_pv_status(0)
                 pv_status_response = await self.send_request(
                     pv_status_command, device_ip, port, timeout=timeout
                 )
                 pv_status_data = parse_pv_status_response(pv_status_response)
+                made_request = True
                 _LOGGER.debug(
                     "PV.GetStatus parsed for %s: PV1=%sW, PV2=%sW, PV3=%sW, PV4=%sW",
                     device_ip,
@@ -423,15 +451,17 @@ class MarstekUDPClient:
                     "PV.GetStatus failed for %s: %s", device_ip, err
                 )
         
-        # Get WiFi status (RSSI signal strength)
+        # Get WiFi status (slow tier - RSSI signal strength)
         if include_wifi:
-            await asyncio.sleep(delay_between_requests)
+            if made_request:
+                await asyncio.sleep(delay_between_requests)
             try:
                 wifi_status_command = get_wifi_status(0)
                 wifi_status_response = await self.send_request(
                     wifi_status_command, device_ip, port, timeout=timeout
                 )
                 wifi_status_data = parse_wifi_status_response(wifi_status_response)
+                made_request = True
                 _LOGGER.debug(
                     "Wifi.GetStatus parsed for %s: RSSI=%s dBm, SSID=%s",
                     device_ip,
@@ -441,27 +471,10 @@ class MarstekUDPClient:
             except (TimeoutError, OSError, ValueError) as err:
                 _LOGGER.debug("Wifi.GetStatus failed for %s: %s", device_ip, err)
         
-        # Get Energy Meter / CT status
-        if include_em:
-            await asyncio.sleep(delay_between_requests)
-            try:
-                em_status_command = get_em_status(0)
-                em_status_response = await self.send_request(
-                    em_status_command, device_ip, port, timeout=timeout
-                )
-                em_status_data = parse_em_status_response(em_status_response)
-                _LOGGER.debug(
-                    "EM.GetStatus parsed for %s: CT=%s, TotalPower=%sW",
-                    device_ip,
-                    "Connected" if em_status_data.get("ct_connected") else "Not connected",
-                    em_status_data.get("em_total_power"),
-                )
-            except (TimeoutError, OSError, ValueError) as err:
-                _LOGGER.debug("EM.GetStatus failed for %s: %s", device_ip, err)
-        
-        # Get detailed battery status (temperature, charge flags)
+        # Get detailed battery status (slow tier - temperature, charge flags)
         if include_bat:
-            await asyncio.sleep(delay_between_requests)
+            if made_request:
+                await asyncio.sleep(delay_between_requests)
             try:
                 bat_status_command = get_battery_status(0)
                 bat_status_response = await self.send_request(
