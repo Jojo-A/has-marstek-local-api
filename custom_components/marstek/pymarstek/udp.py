@@ -159,7 +159,7 @@ class MarstekUDPClient:
                 self._listen_task = loop.create_task(self._listen_for_responses())
 
             await self._send_udp_message(message, target_ip, target_port)
-            _LOGGER.warning("Send request to %s:%d: %s", target_ip, target_port, message)
+            _LOGGER.debug("Send request to %s:%d: %s", target_ip, target_port, message)
             return await asyncio.wait_for(future, timeout=timeout)
         except TimeoutError as err:
             if not quiet_on_timeout:
@@ -197,9 +197,8 @@ class MarstekUDPClient:
                 await asyncio.sleep(1)
 
     async def send_broadcast_request(self, message: str, timeout: float = DISCOVERY_TIMEOUT) -> list[dict[str, Any]]:
-        print(f"[DEBUG] ========== Starting device broadcast discovery ==========")
-        print(f"[DEBUG] Broadcast message: {message}")
-        print(f"[DEBUG] Timeout: {timeout} seconds")
+        """Send a broadcast message and collect all responses within timeout."""
+        _LOGGER.debug("Starting broadcast discovery with timeout %ss", timeout)
         if not self._socket:
             await self.async_setup()
         assert self._socket is not None
@@ -207,7 +206,6 @@ class MarstekUDPClient:
         try:
             message_obj = json.loads(message)
             request_id = message_obj["id"]
-            print(f"[DEBUG] Request ID: {request_id}")
         except (json.JSONDecodeError, KeyError) as exc:
             _LOGGER.error("Invalid message for broadcast: %s", exc)
             return []
@@ -224,39 +222,34 @@ class MarstekUDPClient:
                 self._listen_task = loop.create_task(self._listen_for_responses())
 
             broadcast_addresses = self._get_broadcast_addresses()
-            print(f"[DEBUG] Broadcast addresses: {broadcast_addresses}")
-            print(f"[DEBUG] Port: {self._port}")
+            _LOGGER.debug("Broadcast addresses: %s on port %d", broadcast_addresses, self._port)
             for address in broadcast_addresses:
-                print(f"[DEBUG] Sending to broadcast address: {address}:{self._port}")
                 await self._send_udp_message(message, address, self._port)
 
             while (loop.time() - start_time) < timeout:
                 cached = self._response_cache.pop(request_id, None)
                 if cached:
-                    print(f"[DEBUG] Received device response: {cached['response']}")
+                    _LOGGER.debug("Received device response: %s", cached["response"])
                     responses.append(cached["response"])
                 await asyncio.sleep(0.1)
         finally:
             self._pending_requests.pop(request_id, None)
-        print(f"[DEBUG] Broadcast discovery completed, received {len(responses)} response(s)")
-        print(f"[DEBUG] ========== Broadcast discovery ended ==========")
+        _LOGGER.debug("Broadcast discovery completed, found %d device(s)", len(responses))
         return responses
 
     async def discover_devices(self, use_cache: bool = True) -> list[dict[str, Any]]:
-        print(f"[DEBUG] ========== Starting device discovery ==========")
-        print(f"[DEBUG] Use cache: {use_cache}")
+        """Discover Marstek devices on the network via broadcast."""
+        _LOGGER.debug("Starting device discovery (use_cache=%s)", use_cache)
         if use_cache and self._is_cache_valid():
             assert self._discovery_cache is not None
-            print(f"[DEBUG] Using cached data, returning {len(self._discovery_cache)} device(s)")
+            _LOGGER.debug("Using cached discovery data (%d devices)", len(self._discovery_cache))
             return self._discovery_cache.copy()
 
         devices: list[dict[str, Any]] = []
         seen_devices: set[str] = set()
 
         try:
-            print(f"[DEBUG] Executing broadcast request...")
             responses = await self.send_broadcast_request(discover())
-            print(f"[DEBUG] Received {len(responses)} response(s)")
         except OSError as err:
             _LOGGER.error("Device discovery failed: %s", err)
             responses = []
@@ -295,10 +288,9 @@ class MarstekUDPClient:
 
         self._discovery_cache = devices.copy()
         self._cache_timestamp = loop.time()
-        print(f"[DEBUG] Device discovery completed, found {len(devices)} device(s)")
-        for i, device in enumerate(devices):
-            print(f"[DEBUG] Device {i+1}: {device.get('device_type', 'Unknown')} - {device.get('ip', 'Unknown IP')}")
-        print(f"[DEBUG] ========== Device discovery ended ==========")
+        _LOGGER.debug("Device discovery completed, found %d device(s)", len(devices))
+        for device in devices:
+            _LOGGER.debug("Found device: %s at %s", device.get("device_type"), device.get("ip"))
         return devices
 
     async def pause_polling(self, device_ip: str) -> None:

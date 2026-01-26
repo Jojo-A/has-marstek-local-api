@@ -1,4 +1,10 @@
-"""Battery behavior simulator."""
+"""Battery behavior simulator with realistic P1 meter feedback loop.
+
+Simulates how a real Marstek battery interacts with a P1 meter:
+- P1 meter measures NET flow at meter point (after battery contribution)
+- Battery compensates to keep P1 at 0 (zero import/export)
+- Battery tracks its OWN contribution to avoid oscillation
+"""
 
 import random
 import threading
@@ -29,7 +35,28 @@ from .wifi import WiFiSimulator
 
 
 class BatterySimulator:
-    """Simulates realistic battery behavior over time."""
+    """Simulates realistic Marstek battery behavior with P1 meter feedback.
+    
+    Key concepts:
+    - Gross household consumption: What all appliances are actually using
+    - Battery power: What the battery is providing (+) or absorbing (-)
+    - P1/Grid power (EM total_power): Net flow at meter = gross_consumption - battery_power
+      - Positive = importing from grid (household needs more than battery provides)
+      - Negative = exporting to grid (battery provides more than household needs)
+    
+    In Auto mode, the battery aims to keep P1 at 0 (zero export/import).
+    The battery tracks its OWN contribution to avoid oscillation:
+    - If P1 reads 0, battery knows household = battery_power, so keeps running
+    - If P1 reads +200, battery increases output to compensate
+    - If P1 reads -200, battery decreases output
+    
+    Real example:
+    1. Household uses 800W (gross consumption)
+    2. Battery provides 800W (discharge)
+    3. P1 meter reads: 800W - 800W = 0W (balanced!)
+    4. Battery sees P1=0, knows "I'm giving 800W, P1=0, so household=800W"
+    5. Battery continues at 800W (not 0!)
+    """
 
     def __init__(
         self,
@@ -45,9 +72,17 @@ class BatterySimulator:
 
         # Current state
         self.mode = MODE_AUTO
-        self.target_power = 0
-        self.actual_power = 0
-        self.grid_power = 0
+        self.target_power = 0  # Target for passive/manual mode
+        self.actual_power = 0  # What battery is doing (+ = discharge, - = charge)
+        self.gross_household_consumption = 0  # What appliances use (before battery)
+        self.grid_power = 0  # P1 meter reading (net flow after battery)
+
+        # Phase power distribution (for EM.GetStatus)
+        self.em_a_power = 0
+        self.em_b_power = 0
+        self.em_c_power = 0
+
+        # Passive mode timing
         self.passive_end_time: float | None = None
         self.manual_schedules: list[dict[str, Any]] = []
 
@@ -55,8 +90,19 @@ class BatterySimulator:
         self.base_temp = 25.0
         self.battery_temp = self.base_temp
 
-        # CT state
+        # CT/P1 meter state
         self.ct_connected = True
+
+        # Energy statistics (accumulated over time, in Wh)
+        self.total_pv_energy = 0.0
+        self.total_grid_output_energy = 0.0  # Energy exported to grid
+        self.total_grid_input_energy = 0.0   # Energy imported from grid
+        self.total_load_energy = 0.0         # Total household consumption
+
+        # PV simulation (always 0 for plug-in battery without solar input)
+        self.pv_power = 0
+        self.pv_voltage = 0
+        self.pv_current = 0
 
         # Sub-simulators
         self.household = HouseholdSimulator()
@@ -106,31 +152,52 @@ class BatterySimulator:
                 self.target_power = 0
                 self.passive_end_time = None
 
-        household_consumption = self.household.get_consumption()
-        target = self._calculate_target_power(household_consumption)
+        # Get gross household consumption (what appliances actually use)
+        self.gross_household_consumption = self.household.get_consumption()
+
+        # Calculate target power based on mode
+        target = self._calculate_target_power()
         target = self._apply_soc_limits(target)
 
-        # Add fluctuation
+        # Apply power limits
+        target = max(-self.max_charge_power, min(self.max_discharge_power, target))
+
+        # Add small fluctuation for realism
         if target != 0:
             fluctuation = target * (random.uniform(-1, 1) * self.power_fluctuation_pct / 100)
             self.actual_power = int(target + fluctuation)
         else:
             self.actual_power = 0
 
-        self.grid_power = household_consumption - self.actual_power
+        # Calculate P1 meter reading (net flow AFTER battery contribution)
+        # Positive = importing from grid, Negative = exporting to grid
+        self.grid_power = self.gross_household_consumption - self.actual_power
 
-        # Update SOC
+        # Update phase power distribution
+        self._update_phase_powers()
+
+        # Update SOC based on actual power flow
         hours = elapsed_seconds / 3600
-        energy_wh = self.actual_power * hours
+        energy_wh = self.actual_power * hours  # Positive = discharging
         soc_change = -(energy_wh / self.capacity_wh) * 100
         self.soc = max(0, min(100, self.soc + soc_change))
+
+        # Update energy statistics
+        self._update_energy_stats(elapsed_seconds)
 
         # Update temperature
         self._update_temperature()
 
-    def _calculate_target_power(self, household_consumption: int) -> int:
-        """Calculate target power based on mode and consumption."""
+    def _calculate_target_power(self) -> int:
+        """Calculate target battery power based on mode.
+        
+        In Auto mode: discharge to match household consumption (keep P1 at 0).
+        The battery effectively sees:
+          target = gross_household_consumption (to fully offset it)
+        This makes grid_power = gross - actual ≈ 0
+        """
         if self.mode == MODE_PASSIVE:
+            # Fixed power set by user (+ = discharge, - = charge)
             return self.target_power
 
         if self.mode == MODE_MANUAL:
@@ -138,36 +205,96 @@ class BatterySimulator:
             return schedule.get("power", 0) if schedule else 0
 
         if self.mode == MODE_AUTO:
-            target = min(household_consumption, self.max_discharge_power)
-            return 0 if self.soc < SOC_RESERVE else target
+            # Discharge to offset household, keep P1 at 0
+            if self.soc <= SOC_RESERVE:
+                return 0  # Don't discharge below reserve
+            
+            target = self.gross_household_consumption
+            return min(target, self.max_discharge_power)
 
         if self.mode == MODE_AI:
-            target = household_consumption
+            # Smarter decisions based on time of day and SOC
+            if self.soc <= 15:
+                return 0
+            
             hour = datetime.now().hour
+            target = self.gross_household_consumption
 
+            # Night (cheap rate): might charge
+            if 0 <= hour < 6:
+                if self.soc < 50:
+                    return -int(self.max_charge_power * 0.5)
+                return 0
+
+            # Solar hours: be conservative
             if 9 <= hour < 17:
-                target = int(target * 0.7)
-            if 17 <= hour < 22 and self.soc < 30:
-                target = int(target * 0.5)
+                if self.soc > 60:
+                    target = int(target * 0.5)
+                else:
+                    target = int(target * 0.3)
 
-            target = min(target, self.max_discharge_power)
-            return 0 if self.soc < 15 else target
+            # Evening peak: use battery
+            if 17 <= hour < 22:
+                if self.soc < 30:
+                    target = int(target * 0.5)
+
+            return min(target, self.max_discharge_power)
 
         return 0
 
     def _apply_soc_limits(self, target: int) -> int:
-        """Apply power limits based on SOC."""
+        """Apply power limits based on SOC to protect battery."""
+        # Can't discharge if SOC too low
         if target > 0 and self.soc <= SOC_MIN_DISCHARGE:
             return 0
+        
+        # Can't charge if already full
         if target < 0 and self.soc >= 100:
             return 0
+        
+        # Taper charging when nearly full
         if target < 0 and self.soc > SOC_TAPER_CHARGE:
             taper = (100 - self.soc) / (100 - SOC_TAPER_CHARGE)
             target = int(target * taper)
+        
+        # Taper discharging when nearly empty
         if target > 0 and self.soc < SOC_TAPER_DISCHARGE:
-            taper = self.soc / SOC_TAPER_DISCHARGE
+            taper = (self.soc - SOC_MIN_DISCHARGE) / (SOC_TAPER_DISCHARGE - SOC_MIN_DISCHARGE)
+            taper = max(0, taper)
             target = int(target * taper)
+        
         return target
+
+    def _update_phase_powers(self) -> None:
+        """Update phase power distribution for EM.GetStatus.
+        
+        Realistically distributes grid power across 3 phases.
+        Phase A typically has highest load (kitchen/HVAC).
+        Phases MUST always sum to grid_power (total).
+        """
+        total = self.grid_power
+        
+        # Distribute with realistic imbalance (~40%/35%/25%)
+        a_ratio = 0.40 + random.uniform(-0.05, 0.05)
+        b_ratio = 0.35 + random.uniform(-0.05, 0.05)
+        
+        self.em_a_power = int(total * a_ratio)
+        self.em_b_power = int(total * b_ratio)
+        # Phase C gets the remainder so phases always sum to total
+        self.em_c_power = total - self.em_a_power - self.em_b_power
+
+    def _update_energy_stats(self, elapsed_seconds: float) -> None:
+        """Update energy statistics based on power flow."""
+        hours = elapsed_seconds / 3600
+        
+        # Grid energy tracking
+        if self.grid_power > 0:
+            self.total_grid_input_energy += self.grid_power * hours
+        else:
+            self.total_grid_output_energy += abs(self.grid_power) * hours
+        
+        # Load energy = gross household consumption
+        self.total_load_energy += self.gross_household_consumption * hours
 
     def _update_temperature(self) -> None:
         """Update battery temperature based on power flow."""
@@ -184,9 +311,12 @@ class BatterySimulator:
 
     def _apply_immediate_power_update(self) -> None:
         """Immediately update power to reflect mode change."""
-        household_consumption = self.household.get_consumption()
-        target = self._calculate_target_power(household_consumption)
+        # Refresh household consumption
+        self.gross_household_consumption = self.household.get_consumption()
+        
+        target = self._calculate_target_power()
         target = self._apply_soc_limits(target)
+        target = max(-self.max_charge_power, min(self.max_discharge_power, target))
 
         if target != 0:
             fluctuation = target * (random.uniform(-1, 1) * self.power_fluctuation_pct / 100)
@@ -194,8 +324,9 @@ class BatterySimulator:
         else:
             self.actual_power = 0
 
-        self.grid_power = household_consumption - self.actual_power
-        print(f"[SIM] Immediate power update: actual={self.actual_power}W, grid={self.grid_power}W")
+        self.grid_power = self.gross_household_consumption - self.actual_power
+        self._update_phase_powers()
+        print(f"[SIM] Immediate update: battery={self.actual_power}W, P1={self.grid_power}W")
 
     def _get_active_schedule(self) -> dict[str, Any] | None:
         """Get currently active manual schedule."""
@@ -251,8 +382,9 @@ class BatterySimulator:
                 self._apply_immediate_power_update()
 
     def get_state(self) -> dict[str, Any]:
-        """Get current battery state."""
+        """Get current battery state for API responses."""
         with self._lock:
+            # Determine status label
             if self.actual_power < -50:
                 status = STATUS_CHARGING
             elif self.actual_power > 50:
@@ -260,6 +392,7 @@ class BatterySimulator:
             else:
                 status = STATUS_IDLE
 
+            # Passive remaining time
             passive_remaining = 0
             if self.passive_end_time and self.mode == MODE_PASSIVE:
                 passive_remaining = max(0, int(self.passive_end_time - time.time()))
@@ -269,17 +402,40 @@ class BatterySimulator:
                 passive_cfg = {"power": self.target_power, "cd_time": passive_remaining}
 
             return {
+                # Core battery state
                 "soc": int(self.soc),
                 "power": self.actual_power,
                 "mode": self.mode,
                 "status": status,
+                
+                # Grid/P1 meter state
                 "grid_power": self.grid_power,
-                "household_consumption": self.household.current_consumption,
+                "em_a_power": self.em_a_power,
+                "em_b_power": self.em_b_power,
+                "em_c_power": self.em_c_power,
+                "household_consumption": self.gross_household_consumption,
+                
+                # Mode-specific
                 "passive_remaining": passive_remaining,
                 "passive_cfg": passive_cfg,
+                
+                # Sensors
                 "wifi_rssi": self.wifi.get_rssi(),
                 "battery_temp": round(self.battery_temp, 1),
                 "ct_connected": self.ct_connected,
+                
+                # Battery flags
                 "charg_flag": 1 if self.soc < 100 else 0,
                 "dischrg_flag": 1 if self.soc > SOC_MIN_DISCHARGE else 0,
+                
+                # Energy statistics (Wh)
+                "total_pv_energy": int(self.total_pv_energy),
+                "total_grid_output_energy": int(self.total_grid_output_energy),
+                "total_grid_input_energy": int(self.total_grid_input_energy),
+                "total_load_energy": int(self.total_load_energy),
+                
+                # PV state
+                "pv_power": self.pv_power,
+                "pv_voltage": self.pv_voltage,
+                "pv_current": self.pv_current,
             }

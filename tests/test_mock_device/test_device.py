@@ -32,7 +32,7 @@ class TestDeviceResponses:
         }
 
         set_mode_response = device._build_response(1, "ES.SetMode", set_mode_params)
-        assert set_mode_response["result"]["success"] is True
+        assert set_mode_response["result"]["set_result"] is True  # Per API spec
 
         get_status_response = device._build_response(2, "ES.GetStatus", {})
         get_mode_response = device._build_response(3, "ES.GetMode", {})
@@ -152,14 +152,18 @@ class TestDeviceDiscovery:
         assert "ssid" in result
 
     def test_pv_get_status(self) -> None:
-        """Test PV.GetStatus returns panel info."""
+        """Test PV.GetStatus returns panel info (API spec format)."""
         device = MockMarstekDevice(port=30007, simulate=False)
 
         response = device._build_response(1, "PV.GetStatus", {})
 
         assert response is not None
         result = response["result"]
-        assert "pv1_power" in result
+        # API spec: single channel format with pv_power, pv_voltage, pv_current
+        assert "pv_power" in result
+        assert "pv_voltage" in result
+        assert "pv_current" in result
+        assert "id" in result
 
     def test_bat_get_status(self) -> None:
         """Test Bat.GetStatus returns battery info."""

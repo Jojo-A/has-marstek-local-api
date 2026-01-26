@@ -135,8 +135,10 @@ class TestSOCLimits:
     def test_taper_discharging_near_empty(self) -> None:
         """Test discharging power tapers as SOC approaches 0%."""
         sim = BatterySimulator(initial_soc=7)
+        # SOC 7% with min 5% and taper threshold 10%
+        # taper = (7 - 5) / (10 - 5) = 0.4
         limited = sim._apply_soc_limits(1000)
-        assert 650 <= limited <= 750
+        assert 350 <= limited <= 450  # Roughly 400W
 
 
 class TestAutoModeBehavior:
@@ -145,21 +147,22 @@ class TestAutoModeBehavior:
     def test_discharges_to_cover_household(self) -> None:
         """Test auto mode discharges to cover household consumption."""
         sim = BatterySimulator(initial_soc=50)
-        household = 500
-        target = sim._calculate_target_power(household)
-        assert target == household
+        sim.gross_household_consumption = 500
+        target = sim._calculate_target_power()
+        assert target == 500
 
     def test_limited_by_max_discharge(self) -> None:
         """Test auto mode is limited by max discharge power."""
-        sim = BatterySimulator(initial_soc=50, max_discharge_power=3000)
-        household = 5000
-        target = sim._calculate_target_power(household)
-        assert target == 3000
+        sim = BatterySimulator(initial_soc=50, max_discharge_power=2500)
+        sim.gross_household_consumption = 5000
+        target = sim._calculate_target_power()
+        assert target == 2500
 
     def test_no_discharge_when_soc_low(self) -> None:
-        """Test auto mode doesn't discharge when SOC is below 10%."""
+        """Test auto mode doesn't discharge when SOC is below reserve (10%)."""
         sim = BatterySimulator(initial_soc=8)
-        target = sim._calculate_target_power(1000)
+        sim.gross_household_consumption = 1000
+        target = sim._calculate_target_power()
         assert target == 0
 
 
@@ -170,7 +173,9 @@ class TestPassiveModeBehavior:
         """Test passive mode returns configured target power."""
         sim = BatterySimulator(initial_soc=50)
         sim.set_mode(MODE_PASSIVE, {"power": -2500, "cd_time": 3600})
-        target = sim._calculate_target_power(1000)
+        # Passive mode ignores household consumption
+        sim.gross_household_consumption = 1000
+        target = sim._calculate_target_power()
         assert target == -2500
 
     def test_expiration(self) -> None:
@@ -488,7 +493,9 @@ class TestGridPowerCalculation:
     def test_state_includes_household_consumption(self) -> None:
         """Test state includes household consumption value."""
         sim = BatterySimulator(initial_soc=50)
+        # Manually set a value to test state includes it
+        sim.gross_household_consumption = 200
         state = sim.get_state()
 
         assert "household_consumption" in state
-        assert state["household_consumption"] >= 50
+        assert state["household_consumption"] == 200

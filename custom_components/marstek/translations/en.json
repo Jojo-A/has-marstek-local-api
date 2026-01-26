@@ -91,6 +91,18 @@
       },
       "phase_c_power": {
         "name": "Phase C power"
+      },
+      "total_pv_energy": {
+        "name": "Total solar energy"
+      },
+      "total_grid_output_energy": {
+        "name": "Total grid export"
+      },
+      "total_grid_input_energy": {
+        "name": "Total grid import"
+      },
+      "total_load_energy": {
+        "name": "Total load energy"
       }
     },
     "select": {

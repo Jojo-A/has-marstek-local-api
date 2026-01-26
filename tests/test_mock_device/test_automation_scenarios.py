@@ -77,7 +77,7 @@ class TestAutomationWorkflows:
                 "id": 0,
                 "config": {
                     "mode": "Passive",
-                    "passive_cfg": {"power": 3000, "cd_time": 1800},
+                    "passive_cfg": {"power": 2500, "cd_time": 1800},
                 },
             })
 
@@ -86,7 +86,8 @@ class TestAutomationWorkflows:
 
             assert mode["mode"] == "Passive"
             assert status["bat_power"] > 0
-            assert 2700 < status["bat_power"] < 3200
+            # Max discharge is 2500W with ~5% fluctuation
+            assert 2300 < status["bat_power"] < 2700
         finally:
             device.simulator.stop()
 
@@ -238,7 +239,7 @@ class TestSOCEffects:
                 "id": 0,
                 "config": {
                     "mode": "Passive",
-                    "passive_cfg": {"power": -3000, "cd_time": 3600},
+                    "passive_cfg": {"power": -2500, "cd_time": 3600},
                 },
             })
 

@@ -10,6 +10,7 @@ from .const import DEFAULT_CONFIG, DEFAULT_UDP_PORT, MODE_AUTO, MODE_MANUAL, MOD
 from .handlers import (
     get_static_state,
     handle_bat_get_status,
+    handle_ble_get_status,
     handle_em_get_status,
     handle_es_get_mode,
     handle_es_get_status,
@@ -38,9 +39,12 @@ class MockMarstekDevice:
         self.ip = ip_override or get_local_ip()
         self.sock: socket.socket | None = None
 
-        # Battery simulator
+        # Battery simulator (tracks energy stats internally)
         self.simulator = BatterySimulator(initial_soc=initial_soc)
         self.simulate = simulate
+
+        # BLE connection state (for mock purposes always disconnected)
+        self._ble_connected = False
 
         # Static fallback values
         self._static_soc = initial_soc
@@ -106,20 +110,22 @@ class MockMarstekDevice:
                 if state["power"] > 0
                 else "💤 Idle"
             )
-            grid_indicator = (
-                f"📥 Buying {state['grid_power']}W"
-                if state["grid_power"] > 50
-                else f"📤 Selling {-state['grid_power']}W"
-                if state["grid_power"] < -50
-                else "⚖️ Balanced"
-            )
+            # P1 meter reading: positive = importing, negative = exporting
+            p1 = state["grid_power"]
+            if abs(p1) < 20:
+                p1_indicator = "⚖️ P1=0 (balanced)"
+            elif p1 > 0:
+                p1_indicator = f"📥 P1=+{p1}W (import)"
+            else:
+                p1_indicator = f"📤 P1={p1}W (export)"
+
             passive_info = ""
             if state["mode"] == MODE_PASSIVE and state["passive_remaining"] > 0:
                 passive_info = f" | ⏱️ {state['passive_remaining']}s left"
 
             print(
                 f"[STATUS] SOC: {state['soc']}% | Batt: {state['power']}W | "
-                f"🏠 {state['household_consumption']}W | {grid_indicator} | "
+                f"🏠 {state['household_consumption']}W | {p1_indicator} | "
                 f"Mode: {state['mode']}{passive_info} | {power_indicator}"
             )
 
@@ -168,14 +174,26 @@ class MockMarstekDevice:
         if method == "Marstek.GetDevice":
             return handle_get_device(request_id, src, self.config, self.ip)
 
+        elif method == "BLE.GetStatus":
+            return handle_ble_get_status(
+                request_id, src, self.config, self._ble_connected
+            )
+
         elif method == "ES.GetStatus":
-            return handle_es_get_status(request_id, src, state)
+            # State includes energy stats from simulator
+            state_with_capacity = {**state, "capacity_wh": self.simulator.capacity_wh}
+            return handle_es_get_status(request_id, src, state_with_capacity)
 
         elif method == "ES.GetMode":
             return handle_es_get_mode(request_id, src, state)
 
         elif method == "PV.GetStatus":
-            return handle_pv_get_status(request_id, src)
+            pv_state = {
+                "pv_power": state.get("pv_power", 0),
+                "pv_voltage": state.get("pv_voltage", 0),
+                "pv_current": state.get("pv_current", 0),
+            }
+            return handle_pv_get_status(request_id, src, pv_state)
 
         elif method == "Wifi.GetStatus":
             return handle_wifi_get_status(request_id, src, self.config, self.ip, state)

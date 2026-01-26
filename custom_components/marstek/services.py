@@ -292,11 +292,17 @@ async def async_set_manual_schedule(hass: HomeAssistant, call: ServiceCall) -> N
 
 
 async def async_clear_manual_schedules(hass: HomeAssistant, call: ServiceCall) -> None:
-    """Handle clear_manual_schedules service call."""
+    """Handle clear_manual_schedules service call.
+    
+    Note: This clears all 10 schedule slots sequentially. Each slot requires
+    a separate API call to the device due to protocol limitations.
+    """
     device_id = _get_device_id_from_call(call)
 
     entry, udp_client, host = _get_entry_and_client_from_device_id(hass, device_id)
 
+    _LOGGER.info("Clearing 10 manual schedule slots for device %s...", device_id)
+    
     # Clear all 10 schedule slots by setting them to disabled
     for slot in range(10):
         config = {
@@ -312,8 +318,7 @@ async def async_clear_manual_schedules(hass: HomeAssistant, call: ServiceCall) -
         }
 
         await _send_mode_command(udp_client, host, config)
-
-        _LOGGER.debug("Cleared manual schedule slot %d for device %s", slot, device_id)
+        _LOGGER.debug("Cleared manual schedule slot %d/10 for device %s", slot + 1, device_id)
 
     # Refresh coordinator
     await entry.runtime_data.coordinator.async_request_refresh()
@@ -463,8 +468,12 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
 async def async_unload_services(hass: HomeAssistant) -> None:
     """Unload Marstek services."""
-    hass.services.async_remove(DOMAIN, SERVICE_SET_PASSIVE_MODE)
-    hass.services.async_remove(DOMAIN, SERVICE_SET_MANUAL_SCHEDULE)
-    hass.services.async_remove(DOMAIN, SERVICE_SET_MANUAL_SCHEDULES)
-    hass.services.async_remove(DOMAIN, SERVICE_CLEAR_MANUAL_SCHEDULES)
-    hass.services.async_remove(DOMAIN, SERVICE_REQUEST_DATA_SYNC)
+    for service_name in (
+        SERVICE_SET_PASSIVE_MODE,
+        SERVICE_SET_MANUAL_SCHEDULE,
+        SERVICE_SET_MANUAL_SCHEDULES,
+        SERVICE_CLEAR_MANUAL_SCHEDULES,
+        SERVICE_REQUEST_DATA_SYNC,
+    ):
+        if hass.services.has_service(DOMAIN, service_name):
+            hass.services.async_remove(DOMAIN, service_name)

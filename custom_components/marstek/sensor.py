@@ -467,6 +467,110 @@ class MarstekPhasePowerSensor(MarstekSensor):
         return self.coordinator.data.get(self._sensor_type)
 
 
+class MarstekTotalPVEnergySensor(MarstekSensor):
+    """Representation of a Marstek total PV energy sensor."""
+
+    _attr_translation_key = "total_pv_energy"
+    _attr_native_unit_of_measurement = "Wh"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:solar-power"
+
+    def __init__(
+        self,
+        coordinator: MarstekDataUpdateCoordinator,
+        device_info: dict[str, Any],
+        config_entry: ConfigEntry | None = None,
+    ) -> None:
+        """Initialize the total PV energy sensor."""
+        super().__init__(coordinator, device_info, "total_pv_energy", config_entry)
+
+    @property
+    def native_value(self) -> StateType:
+        """Return the total PV energy."""
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.get("total_pv_energy")
+
+
+class MarstekGridOutputEnergySensor(MarstekSensor):
+    """Representation of a Marstek grid output (export) energy sensor."""
+
+    _attr_translation_key = "total_grid_output_energy"
+    _attr_native_unit_of_measurement = "Wh"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:transmission-tower-export"
+
+    def __init__(
+        self,
+        coordinator: MarstekDataUpdateCoordinator,
+        device_info: dict[str, Any],
+        config_entry: ConfigEntry | None = None,
+    ) -> None:
+        """Initialize the grid output energy sensor."""
+        super().__init__(coordinator, device_info, "total_grid_output_energy", config_entry)
+
+    @property
+    def native_value(self) -> StateType:
+        """Return the total grid output energy."""
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.get("total_grid_output_energy")
+
+
+class MarstekGridInputEnergySensor(MarstekSensor):
+    """Representation of a Marstek grid input (import) energy sensor."""
+
+    _attr_translation_key = "total_grid_input_energy"
+    _attr_native_unit_of_measurement = "Wh"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:transmission-tower-import"
+
+    def __init__(
+        self,
+        coordinator: MarstekDataUpdateCoordinator,
+        device_info: dict[str, Any],
+        config_entry: ConfigEntry | None = None,
+    ) -> None:
+        """Initialize the grid input energy sensor."""
+        super().__init__(coordinator, device_info, "total_grid_input_energy", config_entry)
+
+    @property
+    def native_value(self) -> StateType:
+        """Return the total grid input energy."""
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.get("total_grid_input_energy")
+
+
+class MarstekLoadEnergySensor(MarstekSensor):
+    """Representation of a Marstek total load energy sensor."""
+
+    _attr_translation_key = "total_load_energy"
+    _attr_native_unit_of_measurement = "Wh"
+    _attr_device_class = SensorDeviceClass.ENERGY
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:home-lightning-bolt"
+
+    def __init__(
+        self,
+        coordinator: MarstekDataUpdateCoordinator,
+        device_info: dict[str, Any],
+        config_entry: ConfigEntry | None = None,
+    ) -> None:
+        """Initialize the total load energy sensor."""
+        super().__init__(coordinator, device_info, "total_load_energy", config_entry)
+
+    @property
+    def native_value(self) -> StateType:
+        """Return the total load energy."""
+        if not self.coordinator.data:
+            return None
+        return self.coordinator.data.get("total_load_energy")
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: MarstekConfigEntry,
@@ -502,7 +606,7 @@ async def async_setup_entry(
         )
 
     # Add CT connection sensor if data is available
-    if "ct_state" in data_keys and coordinator.data.get("ct_state") is not None:
+    if "ct_connected" in data_keys and coordinator.data.get("ct_connected") is not None:
         sensors.append(
             MarstekCTConnectionSensor(coordinator, device_info, config_entry)
         )
@@ -526,6 +630,27 @@ async def async_setup_entry(
             sensors.append(
                 MarstekPhasePowerSensor(coordinator, device_info, phase, config_entry)
             )
+
+    # Add energy total sensors if data is available (for Home Assistant Energy Dashboard)
+    if "total_pv_energy" in data_keys and coordinator.data.get("total_pv_energy") is not None:
+        sensors.append(
+            MarstekTotalPVEnergySensor(coordinator, device_info, config_entry)
+        )
+    
+    if "total_grid_output_energy" in data_keys and coordinator.data.get("total_grid_output_energy") is not None:
+        sensors.append(
+            MarstekGridOutputEnergySensor(coordinator, device_info, config_entry)
+        )
+    
+    if "total_grid_input_energy" in data_keys and coordinator.data.get("total_grid_input_energy") is not None:
+        sensors.append(
+            MarstekGridInputEnergySensor(coordinator, device_info, config_entry)
+        )
+    
+    if "total_load_energy" in data_keys and coordinator.data.get("total_load_energy") is not None:
+        sensors.append(
+            MarstekLoadEnergySensor(coordinator, device_info, config_entry)
+        )
 
     # Only register PV sensors when data keys are present to avoid permanent unavailable entities
     for pv_channel in range(1, 5):

@@ -24,25 +24,43 @@ def handle_get_device(
     }
 
 
+def handle_ble_get_status(
+    request_id: int, src: str, config: dict[str, Any], is_connected: bool = False
+) -> dict[str, Any]:
+    """Handle BLE.GetStatus request per API spec."""
+    return {
+        "id": request_id,
+        "src": src,
+        "result": {
+            "id": 0,
+            "state": "connect" if is_connected else "disconnect",
+            "ble_mac": config["ble_mac"],
+        },
+    }
+
+
 def handle_es_get_status(
     request_id: int, src: str, state: dict[str, Any]
 ) -> dict[str, Any]:
-    """Handle ES.GetStatus request."""
+    """Handle ES.GetStatus request with full energy stats per API spec.
+    
+    Energy stats are now tracked in the simulator and included in state.
+    """
     return {
         "id": request_id,
         "src": src,
         "result": {
             "id": 0,
             "bat_soc": state["soc"],
-            "bat_cap": 5120,
-            "pv_power": 0,
+            "bat_cap": state.get("capacity_wh", 5120),
+            "pv_power": state.get("pv_power", 0),
             "ongrid_power": state["grid_power"],
             "offgrid_power": 0,
             "bat_power": state["power"],
-            "total_pv_energy": 0,
-            "total_grid_output_energy": 1000,
-            "total_grid_input_energy": 500,
-            "total_load_energy": 800,
+            "total_pv_energy": state.get("total_pv_energy", 0),
+            "total_grid_output_energy": state.get("total_grid_output_energy", 0),
+            "total_grid_input_energy": state.get("total_grid_input_energy", 0),
+            "total_load_energy": state.get("total_load_energy", 0),
         },
     }
 
@@ -64,28 +82,20 @@ def handle_es_get_mode(
     }
 
 
-def handle_pv_get_status(request_id: int, src: str) -> dict[str, Any]:
-    """Handle PV.GetStatus request."""
+def handle_pv_get_status(request_id: int, src: str, pv_state: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Handle PV.GetStatus request per API spec.
+    
+    API spec returns single channel: pv_power, pv_voltage, pv_current.
+    """
+    state = pv_state or {}
     return {
         "id": request_id,
         "src": src,
         "result": {
-            "pv1_power": 0,
-            "pv1_voltage": 0,
-            "pv1_current": 0,
-            "pv1_state": 0,
-            "pv2_power": 0,
-            "pv2_voltage": 0,
-            "pv2_current": 0,
-            "pv2_state": 0,
-            "pv3_power": 0,
-            "pv3_voltage": 0,
-            "pv3_current": 0,
-            "pv3_state": 0,
-            "pv4_power": 0,
-            "pv4_voltage": 0,
-            "pv4_current": 0,
-            "pv4_state": 0,
+            "id": 0,
+            "pv_power": state.get("pv_power", 0),
+            "pv_voltage": state.get("pv_voltage", 0),
+            "pv_current": state.get("pv_current", 0),
         },
     }
 
@@ -93,13 +103,15 @@ def handle_pv_get_status(request_id: int, src: str) -> dict[str, Any]:
 def handle_wifi_get_status(
     request_id: int, src: str, config: dict[str, Any], ip: str, state: dict[str, Any]
 ) -> dict[str, Any]:
-    """Handle Wifi.GetStatus request."""
+    """Handle Wifi.GetStatus request per API spec."""
     return {
         "id": request_id,
         "src": src,
         "result": {
-            "rssi": state["wifi_rssi"],
+            "id": 0,
+            "wifi_mac": config.get("wifi_mac", ""),
             "ssid": config.get("wifi_name", "AirPort-38"),
+            "rssi": state["wifi_rssi"],
             "sta_ip": ip,
             "sta_gate": ".".join(ip.split(".")[:3]) + ".1",
             "sta_mask": "255.255.255.0",
@@ -111,22 +123,24 @@ def handle_wifi_get_status(
 def handle_em_get_status(
     request_id: int, src: str, state: dict[str, Any]
 ) -> dict[str, Any]:
-    """Handle EM.GetStatus (Energy Meter / CT clamp) request."""
-    grid_power = state["grid_power"]
-    phase_variation = random.uniform(0.8, 1.2)
-    a_power = int(grid_power * 0.33 * phase_variation)
-    b_power = int(grid_power * 0.33 * random.uniform(0.8, 1.2))
-    c_power = grid_power - a_power - b_power
-
+    """Handle EM.GetStatus (Energy Meter / P1 meter / CT clamp) request per API spec.
+    
+    This returns the P1 meter reading - what's actually flowing at the meter AFTER
+    battery contribution. The battery tracks its own contribution internally.
+    
+    Positive values = importing from grid (household consuming more than battery provides)
+    Negative values = exporting to grid (battery/solar producing more than household uses)
+    """
     return {
         "id": request_id,
         "src": src,
         "result": {
+            "id": 0,
             "ct_state": 1 if state["ct_connected"] else 0,
-            "a_power": a_power,
-            "b_power": b_power,
-            "c_power": c_power,
-            "total_power": grid_power,
+            "a_power": state.get("em_a_power", 0),
+            "b_power": state.get("em_b_power", 0),
+            "c_power": state.get("em_c_power", 0),
+            "total_power": state["grid_power"],
         },
     }
 
@@ -134,27 +148,37 @@ def handle_em_get_status(
 def handle_bat_get_status(
     request_id: int, src: str, state: dict[str, Any], capacity_wh: int
 ) -> dict[str, Any]:
-    """Handle Bat.GetStatus request."""
+    """Handle Bat.GetStatus request per API spec.
+    
+    API spec says charg_flag and dischrg_flag are booleans.
+    """
     return {
         "id": request_id,
         "src": src,
         "result": {
+            "id": 0,
+            "soc": state["soc"],
+            "charg_flag": state["charg_flag"] == 1,  # Convert to boolean per spec
+            "dischrg_flag": state["dischrg_flag"] == 1,  # Convert to boolean per spec
             "bat_temp": state["battery_temp"],
-            "charg_flag": state["charg_flag"],
-            "dischrg_flag": state["dischrg_flag"],
             "bat_capacity": int(capacity_wh * state["soc"] / 100),
             "rated_capacity": capacity_wh,
-            "soc": state["soc"],
         },
     }
 
 
 def handle_es_set_mode(request_id: int, src: str) -> dict[str, Any]:
-    """Handle ES.SetMode response (actual mode change handled by device)."""
+    """Handle ES.SetMode response per API spec.
+    
+    API spec: result contains id and set_result (boolean).
+    """
     return {
         "id": request_id,
         "src": src,
-        "result": {"success": True},
+        "result": {
+            "id": 0,
+            "set_result": True,
+        },
     }
 
 
@@ -166,6 +190,9 @@ def get_static_state(soc: int, power: int, mode: str) -> dict[str, Any]:
         "mode": mode,
         "status": STATUS_IDLE,
         "grid_power": 0,
+        "em_a_power": 0,
+        "em_b_power": 0,
+        "em_c_power": 0,
         "household_consumption": 0,
         "passive_remaining": 0,
         "passive_cfg": None,
@@ -174,4 +201,11 @@ def get_static_state(soc: int, power: int, mode: str) -> dict[str, Any]:
         "ct_connected": True,
         "charg_flag": 1,
         "dischrg_flag": 1,
+        "total_pv_energy": 0,
+        "total_grid_output_energy": 0,
+        "total_grid_input_energy": 0,
+        "total_load_energy": 0,
+        "pv_power": 0,
+        "pv_voltage": 0,
+        "pv_current": 0,
     }
