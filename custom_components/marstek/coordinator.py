@@ -184,18 +184,41 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             device_mode = device_status.get("device_mode", "Unknown")
             battery_soc = device_status.get("battery_soc", 0)
             battery_power = device_status.get("battery_power", 0)
+            pv_power = sum(
+                device_status.get(key, 0)
+                for key in ("pv1_power", "pv2_power", "pv3_power", "pv4_power")
+            )
+            em_total_power = device_status.get("em_total_power")
+            wifi_rssi = device_status.get("wifi_rssi")
+            bat_temp = device_status.get("bat_temp")
 
-            has_valid_data = device_mode != "Unknown"
+            has_valid_data = (
+                device_mode not in ("Unknown", "unknown")
+                or battery_soc > 0
+                or battery_power != 0
+                or pv_power != 0
+                or em_total_power is not None
+                or wifi_rssi is not None
+                or bat_temp is not None
+            )
 
             if not has_valid_data:
                 _LOGGER.warning(
-                    "No valid data received from device at %s (device_mode=Unknown, soc=%s, power=%s) - connection failed",
+                    "No valid data received from device at %s (device_mode=%s, soc=%s, power=%s) - connection failed",
                     current_ip,
+                    device_mode,
                     battery_soc,
                     battery_power,
                 )
                 error_msg = f"No valid data received from device at {current_ip}"
                 raise TimeoutError(error_msg) from None  # noqa: TRY301
+            if device_mode in ("Unknown", "unknown"):
+                _LOGGER.debug(
+                    "Device %s reported device_mode=Unknown but other data is present (soc=%s, power=%s)",
+                    current_ip,
+                    battery_soc,
+                    battery_power,
+                )
             _LOGGER.debug(
                 "Device %s poll done: SOC %s%%, Power %sW, Mode %s, Status %s (pv=%s, slow=%s)",
                 current_ip,
