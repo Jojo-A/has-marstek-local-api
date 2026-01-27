@@ -361,6 +361,8 @@ class MarstekUDPClient:
         
         # Track if we've made a request (to know when to add delay)
         made_request = False
+        # Track if any request returned data
+        has_fresh_data = False
         
         # Get ES mode (device_mode, ongrid_power) - always fetched (fast tier)
         try:
@@ -370,6 +372,7 @@ class MarstekUDPClient:
             )
             es_mode_data = parse_es_mode_response(es_mode_response)
             made_request = True
+            has_fresh_data = True
             _LOGGER.debug(
                 "ES.GetMode parsed for %s: Mode=%s, GridPower=%sW",
                 device_ip,
@@ -389,6 +392,7 @@ class MarstekUDPClient:
             )
             es_status_data = parse_es_status_response(es_status_response)
             made_request = True
+            has_fresh_data = True
             _LOGGER.debug(
                 "ES.GetStatus parsed for %s: SOC=%s%%, BattPower=%sW, Status=%s",
                 device_ip,
@@ -410,6 +414,7 @@ class MarstekUDPClient:
                 )
                 em_status_data = parse_em_status_response(em_status_response)
                 made_request = True
+                has_fresh_data = True
                 _LOGGER.debug(
                     "EM.GetStatus parsed for %s: CT=%s, TotalPower=%sW",
                     device_ip,
@@ -430,6 +435,7 @@ class MarstekUDPClient:
                 )
                 pv_status_data = parse_pv_status_response(pv_status_response)
                 made_request = True
+                has_fresh_data = True
                 _LOGGER.debug(
                     "PV.GetStatus parsed for %s: PV1=%sW, PV2=%sW, PV3=%sW, PV4=%sW",
                     device_ip,
@@ -454,6 +460,7 @@ class MarstekUDPClient:
                 )
                 wifi_status_data = parse_wifi_status_response(wifi_status_response)
                 made_request = True
+                has_fresh_data = True
                 _LOGGER.debug(
                     "Wifi.GetStatus parsed for %s: RSSI=%s dBm, SSID=%s",
                     device_ip,
@@ -473,6 +480,7 @@ class MarstekUDPClient:
                     bat_status_command, device_ip, port, timeout=timeout
                 )
                 bat_status_data = parse_bat_status_response(bat_status_response)
+                has_fresh_data = True
                 _LOGGER.debug(
                     "Bat.GetStatus parsed for %s: Temp=%s°C, ChargFlag=%s, DischrgFlag=%s",
                     device_ip,
@@ -486,7 +494,7 @@ class MarstekUDPClient:
         # Merge data (ES.GetStatus has priority for battery data)
         # Pass previous_status to preserve values when individual requests fail
         loop = self._loop or asyncio.get_running_loop()
-        return merge_device_status(
+        status = merge_device_status(
             es_mode_data=es_mode_data,
             es_status_data=es_status_data,
             pv_status_data=pv_status_data,
@@ -497,3 +505,5 @@ class MarstekUDPClient:
             last_update=loop.time(),
             previous_status=previous_status,
         )
+        status["has_fresh_data"] = has_fresh_data
+        return status

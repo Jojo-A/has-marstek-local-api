@@ -156,7 +156,10 @@ class MarstekBatterySensor(MarstekSensor):
         """Return the battery level."""
         if not self.coordinator.data:
             return None
-        return int(self.coordinator.data.get("battery_soc", 0))
+        battery_soc = self.coordinator.data.get("battery_soc")
+        if battery_soc is None:
+            return None
+        return int(battery_soc)
 
 
 class MarstekPowerSensor(MarstekSensor):
@@ -180,7 +183,10 @@ class MarstekPowerSensor(MarstekSensor):
         """Return the battery power."""
         if not self.coordinator.data:
             return None
-        return int(self.coordinator.data.get("battery_power", 0))
+        battery_power = self.coordinator.data.get("battery_power")
+        if battery_power is None:
+            return None
+        return int(battery_power)
 
 
 class MarstekDeviceInfoSensor(MarstekSensor):

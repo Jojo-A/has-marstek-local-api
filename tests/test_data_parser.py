@@ -311,7 +311,7 @@ class TestMergeDeviceStatus:
 
         # Should have defaults for missing data
         assert result["device_mode"] == "auto"
-        assert result["battery_soc"] == 0  # Default
+        assert result["battery_soc"] is None  # Default
         assert result["wifi_rssi"] is None  # Default for optional field
         assert result["ct_connected"] is None  # Default for optional field
         assert result["bat_temp"] is None  # Default for optional field

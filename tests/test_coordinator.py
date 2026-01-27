@@ -130,16 +130,17 @@ async def test_coordinator_polling_paused_returns_empty_dict_when_no_cache(
     mock_udp_client.get_device_status.assert_not_called()
 
 
-async def test_coordinator_invalid_data_raises_update_failed(
+async def test_coordinator_no_fresh_data_raises_update_failed(
     hass: HomeAssistant, mock_config_entry, mock_udp_client
 ):
-    """Test that invalid data (device_mode=Unknown) raises UpdateFailed."""
+    """Test that no fresh data raises UpdateFailed to keep previous values."""
     mock_config_entry.add_to_hass(hass)
     mock_udp_client.get_device_status = AsyncMock(
         return_value={
             "battery_soc": 0,
             "battery_power": 0,
             "device_mode": "Unknown",  # Default value indicates failure
+            "has_fresh_data": False,
         }
     )
 

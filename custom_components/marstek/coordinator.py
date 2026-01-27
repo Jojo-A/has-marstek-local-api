@@ -181,11 +181,13 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._last_slow_fetch = current_time
 
             # Check if we actually got valid data
-            device_mode = device_status.get("device_mode", "Unknown")
-            battery_soc = device_status.get("battery_soc", 0)
-            battery_power = device_status.get("battery_power", 0)
+            has_fresh_data = device_status.get("has_fresh_data", True)
+            device_mode = device_status.get("device_mode")
+            battery_soc = device_status.get("battery_soc")
+            battery_power = device_status.get("battery_power")
+            battery_status = device_status.get("battery_status")
             pv_power = sum(
-                device_status.get(key, 0)
+                device_status.get(key) or 0
                 for key in ("pv1_power", "pv2_power", "pv3_power", "pv4_power")
             )
             em_total_power = device_status.get("em_total_power")
@@ -193,22 +195,31 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             bat_temp = device_status.get("bat_temp")
 
             has_valid_data = (
-                device_mode not in ("Unknown", "unknown")
-                or battery_soc > 0
-                or battery_power != 0
+                device_mode not in (None, "Unknown", "unknown")
+                or battery_soc is not None
+                or battery_power is not None
+                or battery_status not in (None, "Unknown")
                 or pv_power != 0
                 or em_total_power is not None
                 or wifi_rssi is not None
                 or bat_temp is not None
             )
 
+            if not has_fresh_data:
+                _LOGGER.warning(
+                    "No fresh data received from device at %s - keeping previous values",
+                    current_ip,
+                )
+                error_msg = f"No fresh data received from device at {current_ip}"
+                raise TimeoutError(error_msg) from None  # noqa: TRY301
+
             if not has_valid_data:
                 _LOGGER.warning(
                     "No valid data received from device at %s (device_mode=%s, soc=%s, power=%s) - connection failed",
                     current_ip,
-                    device_mode,
-                    battery_soc,
-                    battery_power,
+                    device_mode or "Unknown",
+                    battery_soc or 0,
+                    battery_power or 0,
                 )
                 error_msg = f"No valid data received from device at {current_ip}"
                 raise TimeoutError(error_msg) from None  # noqa: TRY301
@@ -216,8 +227,8 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 _LOGGER.debug(
                     "Device %s reported device_mode=Unknown but other data is present (soc=%s, power=%s)",
                     current_ip,
-                    battery_soc,
-                    battery_power,
+                    battery_soc or 0,
+                    battery_power or 0,
                 )
             _LOGGER.debug(
                 "Device %s poll done: SOC %s%%, Power %sW, Mode %s, Status %s (pv=%s, slow=%s)",
