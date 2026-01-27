@@ -81,16 +81,24 @@
         "name": "Grid power"
       },
       "device_mode": {
-        "name": "Device mode"
+        "name": "Device mode",
+        "state": {
+          "auto": "Auto",
+          "ai": "AI",
+          "manual": "Manual",
+          "passive": "Passive"
+        }
       },
       "battery_status": {
-        "name": "Battery status"
+        "name": "Battery status",
+        "state": {
+          "charging": "Charging",
+          "discharging": "Discharging",
+          "idle": "Idle"
+        }
       },
       "wifi_rssi": {
         "name": "WiFi signal strength"
-      },
-      "ct_connection": {
-        "name": "CT connection"
       },
       "battery_temperature": {
         "name": "Battery temperature"
@@ -194,6 +202,15 @@
           "ai": "AI",
           "manual": "Manual",
           "passive": "Passive"
+        }
+      }
+    },
+    "binary_sensor": {
+      "ct_connection": {
+        "name": "CT connection",
+        "state": {
+          "on": "Connected",
+          "off": "Not connected"
         }
       }
     }

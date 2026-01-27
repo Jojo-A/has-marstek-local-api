@@ -10,7 +10,7 @@ from typing import Any
 from .pymarstek import MarstekUDPClient
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -47,6 +47,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         config_entry: ConfigEntry,
         udp_client: MarstekUDPClient,
         device_ip: str,
+        device_port: int = DEFAULT_UDP_PORT,
         *,
         is_initial_setup: bool = False,
     ) -> None:
@@ -61,8 +62,9 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         self.udp_client = udp_client
         self.config_entry = config_entry
-        # Use initial IP, but will read from config_entry.data dynamically
+        # Use initial IP/port, but read from config_entry.data dynamically
         self._initial_device_ip = device_ip
+        self._initial_device_port = device_port
         
         # Check device capabilities based on device type
         # Per API docs (Chapter 4): Only Venus D supports PV, not Venus C/E
@@ -99,8 +101,9 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         slow_interval = self._get_slow_interval()
         request_delay = self._get_request_delay()
         _LOGGER.debug(
-            "Device %s polling coordinator started, interval: %ss (fast), %ss (medium/PV), %ss (slow/WiFi+Bat), delay: %ss%s",
+            "Device %s:%s polling coordinator started, interval: %ss (fast), %ss (medium/PV), %ss (slow/WiFi+Bat), delay: %ss%s",
             device_ip,
+            device_port,
             fast_interval,
             medium_interval,
             slow_interval,
@@ -154,6 +157,13 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return self.config_entry.data.get(CONF_HOST, self._initial_device_ip)
         return self._initial_device_ip
 
+    @property
+    def device_port(self) -> int:
+        """Get current device port from config entry (supports dynamic updates)."""
+        if self.config_entry:
+            return int(self.config_entry.data.get(CONF_PORT, self._initial_device_port))
+        return self._initial_device_port
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data using library's get_device_status method with tiered polling.
         
@@ -163,8 +173,9 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         - Slow: Wifi.GetStatus, Bat.GetStatus - rarely changes
         """
         current_ip = self.device_ip
+        current_port = self.device_port
         self.last_update_attempt_time = dt_util.now()
-        _LOGGER.debug("Start polling device: %s", current_ip)
+        _LOGGER.debug("Start polling device: %s:%s", current_ip, current_port)
 
         if self.udp_client.is_polling_paused(current_ip):
             _LOGGER.debug("Polling paused for device: %s, skipping update", current_ip)
@@ -201,7 +212,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Device requires delay between requests for stability (configurable)
             device_status = await self.udp_client.get_device_status(
                 current_ip,
-                port=DEFAULT_UDP_PORT,
+                port=current_port,
                 timeout=request_timeout,
                 include_pv=include_pv,
                 include_wifi=include_slow,

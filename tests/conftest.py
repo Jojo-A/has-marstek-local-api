@@ -81,8 +81,8 @@ def create_mock_client(
             "battery_soc": 55,
             "pv1_power": 100,
             "device_mode": "Auto",
-            "battery_power": 250,
-            "battery_status": "Selling",
+            "battery_power": -250,
+            "battery_status": "discharging",
             "ongrid_power": -150,
             # WiFi status
             "wifi_rssi": -58,

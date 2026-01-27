@@ -45,7 +45,14 @@ def handle_es_get_status(
     """Handle ES.GetStatus request with full energy stats per API spec.
     
     Energy stats are now tracked in the simulator and included in state.
+    
+    Note: bat_power sign convention (per real device / jaapp):
+      - Positive = charging (power flowing INTO battery)
+      - Negative = discharging (power flowing OUT of battery)
+    Internal simulator uses opposite convention, so we negate here.
     """
+    # Negate power: internal +discharge/-charge → API +charge/-discharge
+    bat_power = -state["power"]
     return {
         "id": request_id,
         "src": src,
@@ -56,7 +63,7 @@ def handle_es_get_status(
             "pv_power": state.get("pv_power", 0),
             "ongrid_power": state["grid_power"],
             "offgrid_power": 0,
-            "bat_power": state["power"],
+            "bat_power": bat_power,
             "total_pv_energy": state.get("total_pv_energy", 0),
             "total_grid_output_energy": state.get("total_grid_output_energy", 0),
             "total_grid_input_energy": state.get("total_grid_input_energy", 0),

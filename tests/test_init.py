@@ -30,7 +30,10 @@ async def test_setup_and_unload(
         await hass.async_block_till_done()
 
         assert mock_config_entry.state == ConfigEntryState.LOADED
-        assert hass.states.get("sensor.marstek_venus_v3_1_2_3_4_battery_soc") is not None
+        assert (
+            hass.states.get("sensor.marstek_venus_v3_1_2_3_4_battery_level")
+            is not None
+        )
 
         # Unload
         await hass.config_entries.async_unload(mock_config_entry.entry_id)
@@ -81,7 +84,10 @@ async def test_reload_entry(
         await hass.async_block_till_done()
 
         assert mock_config_entry.state == ConfigEntryState.LOADED
-        assert hass.states.get("sensor.marstek_venus_v3_1_2_3_4_battery_soc") is not None
+        assert (
+            hass.states.get("sensor.marstek_venus_v3_1_2_3_4_battery_level")
+            is not None
+        )
 
 
 async def test_services_registered_during_setup(

@@ -23,7 +23,7 @@ from homeassistant.const import (
     UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo, format_mac
 from homeassistant.helpers.typing import StateType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -75,13 +75,14 @@ class MarstekSensor(CoordinatorEntity[MarstekDataUpdateCoordinator], SensorEntit
         self._config_entry = config_entry
         # Use BLE-MAC as device identifier for stability (beardhatcode & mik-laj feedback)
         # BLE-MAC is more stable than IP and ensures device history continuity
-        device_identifier = (
+        device_identifier_raw = (
             device_info.get("ble_mac")
             or device_info.get("mac")
             or device_info.get("wifi_mac")
         )
-        if not device_identifier:
+        if not device_identifier_raw:
             raise ValueError("Marstek device identifier (MAC) is required for stable entities")
+        device_identifier = format_mac(device_identifier_raw)
         # Get current IP for device name (supports dynamic IP updates)
         device_ip = (
             config_entry.data.get(CONF_HOST)
@@ -101,27 +102,15 @@ class MarstekSensor(CoordinatorEntity[MarstekDataUpdateCoordinator], SensorEntit
     def unique_id(self) -> str:
         """Return a unique ID."""
         # Use BLE-MAC as device identifier for stability (beardhatcode & mik-laj feedback)
-        device_id = (
+        device_id_raw = (
             self._device_info.get("ble_mac")
             or self._device_info.get("mac")
             or self._device_info.get("wifi_mac")
         )
-        if not device_id:
+        if not device_id_raw:
             raise ValueError("Marstek unique_id requires MAC-based identifier")
+        device_id = format_mac(device_id_raw)
         return f"{device_id}_{self._sensor_type}"
-
-    def _get_current_ip(self) -> str:
-        """Get current device IP from config_entry (supports dynamic IP updates)."""
-        if self._config_entry:
-            return self._config_entry.data.get(
-                CONF_HOST, self._device_info.get("ip", "Unknown")
-            )
-        return self._device_info.get("ip", "Unknown")
-
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return self._sensor_type.replace("_", " ").title()
 
     @property
     def native_value(self) -> StateType:
@@ -251,7 +240,8 @@ class MarstekBatteryStatusSensor(MarstekSensor):
     """Representation of a Marstek battery status sensor."""
 
     _attr_translation_key = "battery_status"
-    _attr_device_class = None
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["charging", "discharging", "idle"]
     _attr_state_class = None
 
     def __init__(
@@ -335,35 +325,6 @@ class MarstekWiFiRSSISensor(MarstekSensor):
         if not self.coordinator.data:
             return None
         return self.coordinator.data.get("wifi_rssi")
-
-
-class MarstekCTConnectionSensor(MarstekSensor):
-    """Representation of a Marstek CT connection status sensor."""
-
-    _attr_translation_key = "ct_connection"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
-    _attr_device_class = None
-    _attr_state_class = None
-
-    def __init__(
-        self,
-        coordinator: MarstekDataUpdateCoordinator,
-        device_info: dict[str, Any],
-        config_entry: ConfigEntry | None = None,
-    ) -> None:
-        """Initialize the CT connection sensor."""
-        super().__init__(coordinator, device_info, "ct_state", config_entry)
-
-    @property
-    def native_value(self) -> StateType:
-        """Return the CT connection status."""
-        if not self.coordinator.data:
-            return None
-        ct_connected = self.coordinator.data.get("ct_connected")
-        if ct_connected is None:
-            return None
-        return "Connected" if ct_connected else "Not Connected"
 
 
 class MarstekBatteryTemperatureSensor(MarstekSensor):
@@ -573,7 +534,6 @@ async def async_setup_entry(
         MarstekDeviceInfoSensor(coordinator, device_info, "mac", config_entry),
         # Slow-tier sensors - always created to avoid orphaned entities on reload
         MarstekWiFiRSSISensor(coordinator, device_info, config_entry),
-        MarstekCTConnectionSensor(coordinator, device_info, config_entry),
         MarstekBatteryTemperatureSensor(coordinator, device_info, config_entry),
         # Energy meter sensors - always created
         MarstekGridPowerSensor(coordinator, device_info, config_entry),

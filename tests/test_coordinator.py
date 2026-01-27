@@ -23,7 +23,7 @@ def mock_udp_client():
             "battery_soc": 55,
             "battery_power": 100,
             "device_mode": "auto",
-            "battery_status": "Charging",
+            "battery_status": "charging",
             "pv1_power": 200,
         }
     )

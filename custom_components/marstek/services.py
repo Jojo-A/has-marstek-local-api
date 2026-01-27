@@ -11,7 +11,7 @@ import voluptuous as vol
 from .pymarstek import MarstekUDPClient, build_command
 
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, device_registry as dr
@@ -150,7 +150,7 @@ def _get_device_id_from_call(call: ServiceCall) -> str:
 
 def _get_entry_and_client_from_device_id(
     hass: HomeAssistant, device_id: str
-) -> tuple[MarstekConfigEntry, MarstekUDPClient, str]:
+) -> tuple[MarstekConfigEntry, MarstekUDPClient, str, int]:
     """Get config entry and UDP client from device ID."""
     device_registry = dr.async_get(hass)
     device = device_registry.async_get(device_id)
@@ -167,10 +167,11 @@ def _get_entry_and_client_from_device_id(
         entry = hass.config_entries.async_get_entry(entry_id)
         if entry and entry.domain == DOMAIN and entry.state == ConfigEntryState.LOADED:
             host = entry.data.get(CONF_HOST)
+            port = entry.data.get(CONF_PORT, DEFAULT_UDP_PORT)
             # Get shared UDP client from hass.data
             udp_client = hass.data.get(DOMAIN, {}).get(DATA_UDP_CLIENT)
             if host and udp_client:
-                return entry, udp_client, host
+                return entry, udp_client, host, int(port)
 
     raise HomeAssistantError(
         translation_domain=DOMAIN,
@@ -182,6 +183,7 @@ def _get_entry_and_client_from_device_id(
 async def _send_mode_command(
     udp_client: MarstekUDPClient,
     host: str,
+    port: int,
     config: dict[str, Any],
 ) -> None:
     """Send a mode command with retries."""
@@ -199,7 +201,7 @@ async def _send_mode_command(
                 await udp_client.send_request(
                     command,
                     host,
-                    DEFAULT_UDP_PORT,
+                    port,
                     timeout=RETRY_TIMEOUT,
                 )
                 _LOGGER.info(
@@ -237,7 +239,7 @@ async def async_set_passive_mode(hass: HomeAssistant, call: ServiceCall) -> None
     power = call.data[ATTR_POWER]
     duration = call.data[ATTR_DURATION]
 
-    entry, udp_client, host = _get_entry_and_client_from_device_id(hass, device_id)
+    entry, udp_client, host, port = _get_entry_and_client_from_device_id(hass, device_id)
 
     config = {
         "mode": API_MODE_PASSIVE,
@@ -247,7 +249,7 @@ async def async_set_passive_mode(hass: HomeAssistant, call: ServiceCall) -> None
         },
     }
 
-    await _send_mode_command(udp_client, host, config)
+    await _send_mode_command(udp_client, host, port, config)
 
     # Refresh coordinator
     await entry.runtime_data.coordinator.async_request_refresh()
@@ -270,7 +272,7 @@ async def async_set_manual_schedule(hass: HomeAssistant, call: ServiceCall) -> N
     days = call.data[ATTR_DAYS]
     enable = call.data[ATTR_ENABLE]
 
-    entry, udp_client, host = _get_entry_and_client_from_device_id(hass, device_id)
+    entry, udp_client, host, port = _get_entry_and_client_from_device_id(hass, device_id)
 
     # Format times as HH:MM
     start_time_str = start_time.strftime("%H:%M")
@@ -291,7 +293,7 @@ async def async_set_manual_schedule(hass: HomeAssistant, call: ServiceCall) -> N
         },
     }
 
-    await _send_mode_command(udp_client, host, config)
+    await _send_mode_command(udp_client, host, port, config)
 
     # Refresh coordinator
     await entry.runtime_data.coordinator.async_request_refresh()
@@ -316,7 +318,7 @@ async def async_clear_manual_schedules(hass: HomeAssistant, call: ServiceCall) -
     """
     device_id = _get_device_id_from_call(call)
 
-    entry, udp_client, host = _get_entry_and_client_from_device_id(hass, device_id)
+    entry, udp_client, host, port = _get_entry_and_client_from_device_id(hass, device_id)
 
     _LOGGER.info("Clearing 10 manual schedule slots for device %s...", device_id)
     
@@ -334,7 +336,7 @@ async def async_clear_manual_schedules(hass: HomeAssistant, call: ServiceCall) -
             },
         }
 
-        await _send_mode_command(udp_client, host, config)
+        await _send_mode_command(udp_client, host, port, config)
         _LOGGER.debug("Cleared manual schedule slot %d/10 for device %s", slot + 1, device_id)
 
     # Refresh coordinator
@@ -357,7 +359,7 @@ async def async_set_manual_schedules(hass: HomeAssistant, call: ServiceCall) -> 
     device_id = _get_device_id_from_call(call)
     schedules = call.data[ATTR_SCHEDULES]
 
-    entry, udp_client, host = _get_entry_and_client_from_device_id(hass, device_id)
+    entry, udp_client, host, port = _get_entry_and_client_from_device_id(hass, device_id)
 
     for schedule in schedules:
         schedule_slot = schedule[ATTR_SCHEDULE_SLOT]
@@ -382,7 +384,7 @@ async def async_set_manual_schedules(hass: HomeAssistant, call: ServiceCall) -> 
             },
         }
 
-        await _send_mode_command(udp_client, host, config)
+        await _send_mode_command(udp_client, host, port, config)
 
         _LOGGER.debug(
             "Set manual schedule slot %d: %s-%s, power=%dW, days=%s, enabled=%s for device %s",
@@ -411,7 +413,7 @@ async def async_request_data_sync(hass: HomeAssistant, call: ServiceCall) -> Non
 
     if device_id:
         # Refresh specific device
-        entry, _, _ = _get_entry_and_client_from_device_id(hass, device_id)
+        entry, _, _, _ = _get_entry_and_client_from_device_id(hass, device_id)
         await entry.runtime_data.coordinator.async_request_refresh()
         _LOGGER.info("Requested data sync for device %s", device_id)
     else:

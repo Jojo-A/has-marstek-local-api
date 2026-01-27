@@ -30,7 +30,7 @@ async def test_coordinator_success_creates_entities(
         await hass.async_block_till_done()
 
         assert mock_config_entry.state == ConfigEntryState.LOADED
-        state = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_battery_soc")
+        state = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_battery_level")
         assert state is not None
         assert state.state == "55"
 
@@ -51,7 +51,7 @@ async def test_coordinator_failure_marks_entities_unavailable(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    state = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_battery_soc")
+    state = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_battery_level")
     # Entity may not exist if coordinator failed on first refresh
     # or should be unavailable if it was created
     if state:
@@ -105,7 +105,9 @@ async def test_wifi_rssi_sensor_created(
         assert mock_config_entry.state == ConfigEntryState.LOADED
         # Sensor is disabled by default, check entity registry instead of state
         entity_registry = er.async_get(hass)
-        entry = entity_registry.async_get("sensor.marstek_venus_v3_1_2_3_4_wifi_rssi")
+        entry = entity_registry.async_get(
+            "sensor.marstek_venus_v3_1_2_3_4_wifi_signal_strength"
+        )
         assert entry is not None
         assert entry.disabled_by is not None  # Disabled by default
 
@@ -129,14 +131,14 @@ async def test_wifi_rssi_sensor_not_created_when_missing(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-        state = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_wifi_rssi")
+        state = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_wifi_signal_strength")
         assert state is None
 
 
 async def test_ct_connection_sensor_created(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test CT connection sensor is created when data is available (disabled by default)."""
+    """Test CT connection binary sensor is created when data is available (disabled by default)."""
     mock_config_entry.add_to_hass(hass)
 
     status = {
@@ -156,7 +158,9 @@ async def test_ct_connection_sensor_created(
         assert mock_config_entry.state == ConfigEntryState.LOADED
         # Sensor is disabled by default, check entity registry instead of state
         entity_registry = er.async_get(hass)
-        entry = entity_registry.async_get("sensor.marstek_venus_v3_1_2_3_4_ct_state")
+        entry = entity_registry.async_get(
+            "binary_sensor.marstek_venus_v3_1_2_3_4_ct_connection"
+        )
         assert entry is not None
         assert entry.disabled_by is not None  # Disabled by default
 
@@ -164,7 +168,7 @@ async def test_ct_connection_sensor_created(
 async def test_ct_connection_sensor_disconnected(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test CT connection sensor shows disconnected state (disabled by default)."""
+    """Test CT connection binary sensor shows disconnected state (disabled by default)."""
     mock_config_entry.add_to_hass(hass)
 
     status = {
@@ -183,7 +187,9 @@ async def test_ct_connection_sensor_disconnected(
 
         # Sensor is disabled by default, check entity registry instead of state
         entity_registry = er.async_get(hass)
-        entry = entity_registry.async_get("sensor.marstek_venus_v3_1_2_3_4_ct_state")
+        entry = entity_registry.async_get(
+            "binary_sensor.marstek_venus_v3_1_2_3_4_ct_connection"
+        )
         assert entry is not None
         assert entry.disabled_by is not None  # Disabled by default
 
@@ -208,7 +214,7 @@ async def test_battery_temperature_sensor_created(
         await hass.async_block_till_done()
 
         assert mock_config_entry.state == ConfigEntryState.LOADED
-        state = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_bat_temp")
+        state = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_battery_temperature")
         assert state is not None
         assert state.state == "27.5"
 
@@ -236,7 +242,7 @@ async def test_grid_total_power_sensor_created(
         await hass.async_block_till_done()
 
         assert mock_config_entry.state == ConfigEntryState.LOADED
-        state = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_em_total_power")
+        state = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_grid_total_power")
         assert state is not None
         assert state.state == "360"
 
@@ -265,15 +271,15 @@ async def test_phase_power_sensors_created(
         assert mock_config_entry.state == ConfigEntryState.LOADED
         
         # Check all three phase sensors (entity_id uses sensor_type em_X_power)
-        state_a = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_em_a_power")
+        state_a = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_phase_a_power")
         assert state_a is not None
         assert state_a.state == "120"
         
-        state_b = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_em_b_power")
+        state_b = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_phase_b_power")
         assert state_b is not None
         assert state_b.state == "115"
         
-        state_c = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_em_c_power")
+        state_c = hass.states.get("sensor.marstek_venus_v3_1_2_3_4_phase_c_power")
         assert state_c is not None
         assert state_c.state == "125"
 
@@ -289,7 +295,7 @@ async def test_all_new_sensors_with_full_status(
         "device_mode": "auto",
         "battery_soc": 55,
         "battery_power": 250,
-        "battery_status": "Selling",
+        "battery_status": "discharging",
         "ongrid_power": -150,
         # WiFi
         "wifi_rssi": -58,
@@ -319,14 +325,30 @@ async def test_all_new_sensors_with_full_status(
         entity_registry = er.async_get(hass)
         
         # WiFi and CT sensors are disabled by default
-        assert entity_registry.async_get("sensor.marstek_venus_v3_1_2_3_4_wifi_rssi") is not None
-        assert entity_registry.async_get("sensor.marstek_venus_v3_1_2_3_4_ct_state") is not None
+        assert (
+            entity_registry.async_get(
+                "sensor.marstek_venus_v3_1_2_3_4_wifi_signal_strength"
+            )
+            is not None
+        )
+        assert (
+            entity_registry.async_get(
+                "binary_sensor.marstek_venus_v3_1_2_3_4_ct_connection"
+            )
+            is not None
+        )
         
         # Battery temp and grid power are enabled
-        assert hass.states.get("sensor.marstek_venus_v3_1_2_3_4_bat_temp") is not None
-        assert hass.states.get("sensor.marstek_venus_v3_1_2_3_4_em_total_power") is not None
+        assert (
+            hass.states.get("sensor.marstek_venus_v3_1_2_3_4_battery_temperature")
+            is not None
+        )
+        assert (
+            hass.states.get("sensor.marstek_venus_v3_1_2_3_4_grid_total_power")
+            is not None
+        )
         
         # Phase sensors (entity_id uses em_X_power)
-        assert hass.states.get("sensor.marstek_venus_v3_1_2_3_4_em_a_power") is not None
-        assert hass.states.get("sensor.marstek_venus_v3_1_2_3_4_em_b_power") is not None
-        assert hass.states.get("sensor.marstek_venus_v3_1_2_3_4_em_c_power") is not None
+        assert hass.states.get("sensor.marstek_venus_v3_1_2_3_4_phase_a_power") is not None
+        assert hass.states.get("sensor.marstek_venus_v3_1_2_3_4_phase_b_power") is not None
+        assert hass.states.get("sensor.marstek_venus_v3_1_2_3_4_phase_c_power") is not None

@@ -11,9 +11,10 @@ import voluptuous as vol
 
 from homeassistant.components.device_automation import InvalidDeviceAutomationConfig
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.const import CONF_DEVICE_ID, CONF_DOMAIN, CONF_HOST, CONF_TYPE
+from homeassistant.const import CONF_DEVICE_ID, CONF_DOMAIN, CONF_HOST, CONF_PORT, CONF_TYPE
 from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.device_registry import format_mac
 from homeassistant.helpers.typing import ConfigType, TemplateVarsType
 
 from .const import DATA_UDP_CLIENT, DEFAULT_UDP_PORT, DOMAIN
@@ -91,13 +92,15 @@ async def async_call_action_from_config(
     action_type: str = config[CONF_TYPE]
     device_id: str = config[CONF_DEVICE_ID]
 
-    host = await _get_host_from_device(hass, device_id)
-    if not host:
+    host_port = await _get_host_from_device(hass, device_id)
+    if not host_port:
         raise InvalidDeviceAutomationConfig(
             translation_domain=DOMAIN,
             translation_key="device_not_found",
             translation_placeholders={"device_id": device_id},
         )
+
+    host, port = host_port
 
     power, enable = _get_action_parameters(action_type)
     command = _build_set_mode_command(power, enable)
@@ -120,7 +123,7 @@ async def async_call_action_from_config(
                 await udp_client.send_request(
                     command,
                     host,
-                    DEFAULT_UDP_PORT,
+                    port,
                     timeout=timeout,
                     quiet_on_timeout=True,
                 )
@@ -134,7 +137,7 @@ async def async_call_action_from_config(
                 )
 
             try:
-                if await _verify_es_mode(hass, host, enable, power, udp_client):
+                if await _verify_es_mode(hass, host, port, enable, power, udp_client):
                     _LOGGER.info(
                         "ES.SetMode action '%s' confirmed after attempt %d/%d for device %s",
                         action_type,
@@ -212,6 +215,7 @@ def _build_set_mode_command(power: int, enable: int) -> str:
 async def _verify_es_mode(
     hass: HomeAssistant,
     host: str,
+    port: int,
     enable: int,
     power: int,
     udp_client: Any,
@@ -229,7 +233,7 @@ async def _verify_es_mode(
             response = await udp_client.send_request(
                 get_es_mode(0),
                 host,
-                DEFAULT_UDP_PORT,
+                port,
                 timeout=VERIFICATION_TIMEOUT,
                 quiet_on_timeout=True,
             )
@@ -260,7 +264,9 @@ async def _verify_es_mode(
     return False
 
 
-async def _get_host_from_device(hass: HomeAssistant, device_id: str) -> str | None:
+async def _get_host_from_device(
+    hass: HomeAssistant, device_id: str
+) -> tuple[str, int] | None:
     """Resolve device IP address from device registry and config entries."""
     device_registry = dr.async_get(hass)
     device = device_registry.async_get(device_id)
@@ -273,8 +279,9 @@ async def _get_host_from_device(hass: HomeAssistant, device_id: str) -> str | No
         entry = hass.config_entries.async_get_entry(entry_id)
         if entry and entry.domain == DOMAIN:
             host = entry.data.get(CONF_HOST)  # Use CONF_HOST constant for consistency
+            port = entry.data.get(CONF_PORT, DEFAULT_UDP_PORT)
             if host:
-                return host
+                return host, int(port)
 
     # Priority 2: Fallback to identifier if it looks like an IP address
     # (This should rarely happen, as identifiers are typically MAC addresses)
@@ -283,7 +290,12 @@ async def _get_host_from_device(hass: HomeAssistant, device_id: str) -> str | No
             # Basic check: if identifier contains dots, it might be an IP address
             # Otherwise it's likely a MAC address and we should skip it
             if "." in identifier:
-                return identifier
+                return identifier, DEFAULT_UDP_PORT
+            # Normalize in case an IP-like identifier was saved without dots
+            try:
+                _ = format_mac(identifier)
+            except (ValueError, TypeError):
+                continue
 
     return None
 

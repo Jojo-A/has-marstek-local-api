@@ -248,8 +248,8 @@ class TestMergeDeviceStatus:
         }
         es_status_data = {
             "battery_soc": 55,
-            "battery_power": 250,
-            "battery_status": "Selling",
+            "battery_power": -250,
+            "battery_status": "discharging",
         }
         pv_status_data = {
             "pv1_power": 300,
@@ -283,8 +283,8 @@ class TestMergeDeviceStatus:
         # Check all merged fields
         assert result["device_mode"] == "auto"
         assert result["battery_soc"] == 55
-        assert result["battery_power"] == 250
-        assert result["battery_status"] == "Selling"
+        assert result["battery_power"] == -250
+        assert result["battery_status"] == "discharging"
         assert result["pv1_power"] == 300
         assert result["wifi_rssi"] == -58
         assert result["ct_connected"] is True
@@ -341,9 +341,9 @@ class TestMergeDeviceStatus:
         """
         previous_status = {
             "device_mode": "auto",
-            "battery_status": "Selling",
+            "battery_status": "discharging",
             "battery_soc": 60,
-            "battery_power": 300,
+            "battery_power": -300,
             "ct_state": 1,
             "ct_connected": True,
             "em_total_power": 500,
@@ -358,8 +358,8 @@ class TestMergeDeviceStatus:
         }
         es_status_data = {
             "battery_soc": 58,  # Updated value
-            "battery_power": 280,
-            "battery_status": "Selling",
+            "battery_power": -280,
+            "battery_status": "discharging",
         }
         
         result = merge_device_status(
@@ -375,8 +375,8 @@ class TestMergeDeviceStatus:
         # Fresh data from successful requests
         assert result["device_mode"] == "auto"
         assert result["battery_soc"] == 58  # Updated
-        assert result["battery_power"] == 280  # Updated
-        assert result["battery_status"] == "Selling"
+        assert result["battery_power"] == -280  # Updated
+        assert result["battery_status"] == "discharging"
         
         # Preserved values from previous_status (requests failed)
         assert result["ct_state"] == 1  # Preserved
@@ -388,7 +388,7 @@ class TestMergeDeviceStatus:
         """Test that 'Unknown' default values are replaced by previous_status."""
         previous_status = {
             "device_mode": "auto",
-            "battery_status": "Idle",
+            "battery_status": "idle",
         }
         
         # Simulate all requests failed - merge_device_status would use defaults
@@ -400,7 +400,7 @@ class TestMergeDeviceStatus:
 
         # Should use previous values instead of defaults
         assert result["device_mode"] == "auto"  # Preserved from previous
-        assert result["battery_status"] == "Idle"  # Preserved from previous
+        assert result["battery_status"] == "idle"  # Preserved from previous
 
     def test_fresh_data_overrides_previous_status(self):
         """Test that fresh data always overrides previous_status values."""
@@ -461,7 +461,7 @@ class TestParseEsStatusResponse:
             "result": {
                 "bat_soc": 55,
                 "bat_cap": 5120,
-                "bat_power": -1000,  # Negative = charging
+                "bat_power": 1000,  # Positive = charging
                 "pv_power": 1200,
                 "ongrid_power": 200,
             },
@@ -470,8 +470,8 @@ class TestParseEsStatusResponse:
         result = parse_es_status_response(response)
 
         assert result["battery_soc"] == 55
-        assert result["battery_power"] == 1000  # abs() applied
-        assert result["battery_status"] == "Buying"  # Charging = Buying
+        assert result["battery_power"] == 1000  # Raw positive value
+        assert result["battery_status"] == "charging"
 
     def test_parse_discharging_status(self):
         """Test parsing discharging battery status."""
@@ -479,15 +479,15 @@ class TestParseEsStatusResponse:
             "id": 1,
             "result": {
                 "bat_soc": 55,
-                "bat_power": 800,  # Positive = discharging
+                "bat_power": -800,  # Negative = discharging
                 "ongrid_power": -500,
             },
         }
 
         result = parse_es_status_response(response)
 
-        assert result["battery_power"] == 800
-        assert result["battery_status"] == "Selling"  # Discharging = Selling
+        assert result["battery_power"] == -800  # Raw negative value
+        assert result["battery_status"] == "discharging"
 
     def test_parse_idle_status(self):
         """Test parsing idle battery status."""
@@ -502,7 +502,7 @@ class TestParseEsStatusResponse:
         result = parse_es_status_response(response)
 
         assert result["battery_power"] == 0
-        assert result["battery_status"] == "Idle"
+        assert result["battery_status"] == "idle"
 
 
 class TestMergeDeviceStatusNoPV:

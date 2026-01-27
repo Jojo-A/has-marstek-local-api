@@ -11,6 +11,7 @@ DATA_UDP_CLIENT: Final = "udp_client"  # Key for shared UDP client in hass.data
 
 PLATFORMS: Final[list[Platform]] = [
     Platform.SENSOR,
+    Platform.BINARY_SENSOR,
     Platform.SELECT,
 ]
 

@@ -41,8 +41,10 @@ class TestDeviceResponses:
         mode_result = get_mode_response["result"]
 
         assert mode_result["mode"] == "Passive"
-        assert result["bat_power"] < 0
-        assert 1300 < abs(result["bat_power"]) < 1500
+        # API bat_power: positive = charging, negative = discharging
+        # Internal power=-1400 (charging) -> API bat_power=+1400
+        assert result["bat_power"] > 0
+        assert 1300 < result["bat_power"] < 1500
 
     def test_es_get_status_after_passive_discharge(self) -> None:
         """Test ES.GetStatus returns correct power for passive discharging."""
@@ -63,8 +65,10 @@ class TestDeviceResponses:
         result = get_status_response["result"]
 
         assert get_mode_response["result"]["mode"] == "Passive"
-        assert result["bat_power"] > 0
-        assert 1300 < result["bat_power"] < 1500
+        # API bat_power: positive = charging, negative = discharging
+        # Internal power=1400 (discharging) -> API bat_power=-1400
+        assert result["bat_power"] < 0
+        assert 1300 < abs(result["bat_power"]) < 1500
 
     def test_es_get_status_after_manual_mode(self) -> None:
         """Test ES.GetStatus returns correct power after manual schedule set."""
@@ -92,8 +96,10 @@ class TestDeviceResponses:
         result = get_status_response["result"]
 
         assert get_mode_response["result"]["mode"] == "Manual"
-        assert result["bat_power"] < 0
-        assert 1900 < abs(result["bat_power"]) < 2100
+        # API bat_power: positive = charging, negative = discharging
+        # Internal power=-2000 (charging) -> API bat_power=+2000
+        assert result["bat_power"] > 0
+        assert 1900 < result["bat_power"] < 2100
 
     def test_es_get_status_with_simulation_thread(self) -> None:
         """Test ES.GetStatus returns correct values with simulation thread running."""
@@ -118,8 +124,10 @@ class TestDeviceResponses:
             result = get_status_response["result"]
 
             assert get_mode_response["result"]["mode"] == "Passive"
-            assert result["bat_power"] < 0
-            assert 1300 < abs(result["bat_power"]) < 1500
+            # API bat_power: positive = charging, negative = discharging
+            # Internal power=-1400 (charging) -> API bat_power=+1400
+            assert result["bat_power"] > 0
+            assert 1300 < result["bat_power"] < 1500
         finally:
             device.simulator.stop()
 

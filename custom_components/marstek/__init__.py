@@ -9,7 +9,7 @@ from typing import Any
 from .pymarstek import MarstekUDPClient, get_es_mode
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
@@ -81,6 +81,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MarstekConfigEntry) -> b
     udp_client = await _get_or_create_shared_udp_client(hass)
 
     stored_ip = entry.data[CONF_HOST]
+    stored_port = entry.data.get(CONF_PORT, DEFAULT_UDP_PORT)
     # Only use BLE-MAC for device identification (user feedback)
     stored_ble_mac = entry.data.get("ble_mac")
 
@@ -94,11 +95,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: MarstekConfigEntry) -> b
     # If we have an IP address in the configuration, we should always connect to that IP
     # Discovery is handled by Scanner, not here
     try:
-        _LOGGER.info("Attempting connection to %s:%s", stored_ip, DEFAULT_UDP_PORT)
+        _LOGGER.info("Attempting connection to %s:%s", stored_ip, stored_port)
         await udp_client.send_request(
             get_es_mode(0),
             stored_ip,
-            DEFAULT_UDP_PORT,
+            stored_port,
             timeout=5.0,  # Increased timeout for initial connection
         )
         # Connection successful - device is at the configured IP
@@ -130,6 +131,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MarstekConfigEntry) -> b
     # Use device info from config_entry (saved during config flow)
     device_info_dict = {
         "ip": stored_ip,
+        "port": stored_port,
         "mac": entry.data.get("mac", ""),
         "device_type": entry.data.get("device_type", "Unknown"),
         "version": entry.data.get("version", 0),
@@ -141,7 +143,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: MarstekConfigEntry) -> b
     # Create coordinator in __init__.py (mik-laj feedback)
     # Use is_initial_setup=True for faster API request delays during first data fetch
     coordinator = MarstekDataUpdateCoordinator(
-        hass, entry, udp_client, device_info_dict["ip"], is_initial_setup=True
+        hass,
+        entry,
+        udp_client,
+        device_info_dict["ip"],
+        device_info_dict.get("port", stored_port),
+        is_initial_setup=True,
     )
     
     try:

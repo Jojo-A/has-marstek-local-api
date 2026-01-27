@@ -10,10 +10,10 @@ from .pymarstek import MarstekUDPClient, build_command
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST
+from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceInfo, format_mac
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 try:
@@ -101,22 +101,22 @@ class MarstekOperatingModeSelect(
         self._config_entry = config_entry
 
         # Use BLE-MAC as device identifier for stability
-        device_identifier = (
+        device_identifier_raw = (
             device_info.get("ble_mac")
             or device_info.get("mac")
             or device_info.get("wifi_mac")
         )
-        if not device_identifier:
+        if not device_identifier_raw:
             raise ValueError("Marstek device identifier (MAC) is required")
 
-        self._device_identifier = device_identifier
-        self._attr_unique_id = f"{device_identifier}_operating_mode"
+        self._device_identifier = format_mac(device_identifier_raw)
+        self._attr_unique_id = f"{self._device_identifier}_operating_mode"
 
         # Get current IP for device name
         device_ip = config_entry.data.get(CONF_HOST, device_info.get("ip", "Unknown"))
 
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, device_identifier)},
+            identifiers={(DOMAIN, self._device_identifier)},
             name=f"Marstek {device_info['device_type']} v{device_info['version']} ({device_ip})",
             manufacturer="Marstek",
             model=device_info["device_type"],
@@ -145,6 +145,7 @@ class MarstekOperatingModeSelect(
             )
 
         host = self._config_entry.data.get(CONF_HOST)
+        port = self._config_entry.data.get(CONF_PORT, DEFAULT_UDP_PORT)
         if not host:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
@@ -169,7 +170,7 @@ class MarstekOperatingModeSelect(
                     await self._udp_client.send_request(
                         command,
                         host,
-                        DEFAULT_UDP_PORT,
+                        port,
                         timeout=RETRY_TIMEOUT,
                     )
                     _LOGGER.info(

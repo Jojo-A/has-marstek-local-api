@@ -105,6 +105,7 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 title=f"Marstek {device['device_type']} ({device['ip']})",
                 data={
                     CONF_HOST: device["ip"],
+                    CONF_PORT: DEFAULT_UDP_PORT,
                     CONF_MAC: device["mac"],
                     "device_type": device["device_type"],
                     "version": device["version"],
@@ -398,12 +399,20 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 device_info = await get_device_info(host=host, port=port)
                 if device_info:
-                    self.hass.config_entries.async_update_entry(
-                        reauth_entry,
-                        data={**reauth_entry.data, CONF_HOST: host},
+                    unique_id_mac = (
+                        device_info.get("ble_mac")
+                        or device_info.get("mac")
+                        or device_info.get("wifi_mac")
                     )
-                    await self.hass.config_entries.async_reload(reauth_entry.entry_id)
-                    return self.async_abort(reason="reauth_successful")
+                    if not unique_id_mac:
+                        errors["base"] = "invalid_discovery_info"
+                    else:
+                        await self.async_set_unique_id(format_mac(unique_id_mac))
+                        self._abort_if_unique_id_mismatch()
+                        return self.async_update_reload_and_abort(
+                            reauth_entry,
+                            data_updates={CONF_HOST: host},
+                        )
                 errors["base"] = "cannot_connect"
             except (OSError, TimeoutError, ValueError):
                 errors["base"] = "cannot_connect"

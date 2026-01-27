@@ -7,6 +7,7 @@ import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_DEVICE_ID, CONF_DOMAIN, CONF_TYPE
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.device_registry import format_mac
 
 from custom_components.marstek.const import DOMAIN
 from custom_components.marstek.device_action import (
@@ -16,6 +17,8 @@ from custom_components.marstek.device_action import (
     async_call_action_from_config,
     async_get_actions,
 )
+
+DEVICE_IDENTIFIER = format_mac("AA:BB:CC:DD:EE:FF")
 
 
 def _mock_client(status=None, mode_response=None):
@@ -63,7 +66,7 @@ async def test_async_get_actions(hass, mock_config_entry):
         await hass.async_block_till_done()
 
     device_registry = dr.async_get(hass)
-    device = device_registry.async_get_device(identifiers={(DOMAIN, "AA:BB:CC:DD:EE:FF")})
+    device = device_registry.async_get_device(identifiers={(DOMAIN, DEVICE_IDENTIFIER)})
     assert device
 
     actions = await async_get_actions(hass, device.id)
@@ -99,7 +102,7 @@ async def test_device_actions_pause_and_resume(
         await hass.async_block_till_done()
 
     device_registry = dr.async_get(hass)
-    device = device_registry.async_get_device(identifiers={(DOMAIN, "AA:BB:CC:DD:EE:FF")})
+    device = device_registry.async_get_device(identifiers={(DOMAIN, DEVICE_IDENTIFIER)})
     assert device
 
     config = {

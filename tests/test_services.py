@@ -13,6 +13,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from homeassistant.helpers.device_registry import format_mac
 from custom_components.marstek.const import DOMAIN
 from custom_components.marstek.services import (
     ATTR_DEVICE_ID,
@@ -34,6 +35,7 @@ from custom_components.marstek.services import (
 )
 
 from tests.conftest import create_mock_client, patch_marstek_integration
+DEVICE_IDENTIFIER = format_mac("AA:BB:CC:DD:EE:FF")
 
 
 def test_calculate_week_set() -> None:
@@ -91,7 +93,7 @@ async def test_set_passive_mode_service(
         # Get device ID from registry
         device_registry = dr.async_get(hass)
         device = device_registry.async_get_device(
-            identifiers={(DOMAIN, "AA:BB:CC:DD:EE:FF")}
+            identifiers={(DOMAIN, DEVICE_IDENTIFIER)}
         )
         assert device is not None
 
@@ -130,7 +132,7 @@ async def test_set_manual_schedule_service(
         # Get device ID
         device_registry = dr.async_get(hass)
         device = device_registry.async_get_device(
-            identifiers={(DOMAIN, "AA:BB:CC:DD:EE:FF")}
+            identifiers={(DOMAIN, DEVICE_IDENTIFIER)}
         )
         assert device is not None
 
@@ -171,7 +173,7 @@ async def test_clear_manual_schedules_service(
         # Get device ID
         device_registry = dr.async_get(hass)
         device = device_registry.async_get_device(
-            identifiers={(DOMAIN, "AA:BB:CC:DD:EE:FF")}
+            identifiers={(DOMAIN, DEVICE_IDENTIFIER)}
         )
         assert device is not None
 
@@ -238,7 +240,7 @@ async def test_service_command_failure_retries(
 
         device_registry = dr.async_get(hass)
         device = device_registry.async_get_device(
-            identifiers={(DOMAIN, "AA:BB:CC:DD:EE:FF")}
+            identifiers={(DOMAIN, DEVICE_IDENTIFIER)}
         )
         assert device is not None
 
@@ -283,7 +285,7 @@ async def test_service_command_all_retries_fail(
 
         device_registry = dr.async_get(hass)
         device = device_registry.async_get_device(
-            identifiers={(DOMAIN, "AA:BB:CC:DD:EE:FF")}
+            identifiers={(DOMAIN, DEVICE_IDENTIFIER)}
         )
         assert device is not None
 
@@ -316,7 +318,7 @@ async def test_set_manual_schedules_service(
         # Get device ID
         device_registry = dr.async_get(hass)
         device = device_registry.async_get_device(
-            identifiers={(DOMAIN, "AA:BB:CC:DD:EE:FF")}
+            identifiers={(DOMAIN, DEVICE_IDENTIFIER)}
         )
         assert device is not None
 
@@ -368,7 +370,7 @@ async def test_request_data_sync_service_single_device(
         # Get device ID
         device_registry = dr.async_get(hass)
         device = device_registry.async_get_device(
-            identifiers={(DOMAIN, "AA:BB:CC:DD:EE:FF")}
+            identifiers={(DOMAIN, DEVICE_IDENTIFIER)}
         )
         assert device is not None
 

@@ -25,10 +25,10 @@ MODE_AI = "AI"
 MODE_MANUAL = "Manual"
 MODE_PASSIVE = "Passive"
 
-# Battery status labels
-STATUS_CHARGING = "Buying"
-STATUS_DISCHARGING = "Selling"
-STATUS_IDLE = "Idle"
+# Battery status labels (lowercase translation keys)
+STATUS_CHARGING = "charging"
+STATUS_DISCHARGING = "discharging"
+STATUS_IDLE = "idle"
 
 # Default simulation settings (2500W matches typical Venus 3.0 limits)
 DEFAULT_MAX_CHARGE_POWER = 2500

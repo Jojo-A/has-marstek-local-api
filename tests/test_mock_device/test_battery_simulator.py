@@ -192,13 +192,13 @@ class TestStatusLabels:
     """Tests for battery status labels."""
 
     def test_charging_status(self) -> None:
-        """Test status shows 'Buying' when charging."""
+        """Test status shows 'Charging' when charging."""
         sim = BatterySimulator(initial_soc=50)
         sim.actual_power = -500
         assert sim.get_state()["status"] == STATUS_CHARGING
 
     def test_discharging_status(self) -> None:
-        """Test status shows 'Selling' when discharging."""
+        """Test status shows 'Discharging' when discharging."""
         sim = BatterySimulator(initial_soc=50)
         sim.actual_power = 500
         assert sim.get_state()["status"] == STATUS_DISCHARGING

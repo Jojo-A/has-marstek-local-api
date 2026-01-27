@@ -118,10 +118,10 @@ def main() -> int:
     print("--- Status Labels ---")
     sim = BatterySimulator(initial_soc=50)
     sim.actual_power = -500
-    test("Status Buying when charging", sim.get_state()["status"] == STATUS_CHARGING)
+    test("Status Charging when charging", sim.get_state()["status"] == STATUS_CHARGING)
     sim.actual_power = 500
     test(
-        "Status Selling when discharging",
+        "Status Discharging when discharging",
         sim.get_state()["status"] == STATUS_DISCHARGING,
     )
     sim.actual_power = 10

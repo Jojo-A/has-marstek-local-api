@@ -46,8 +46,10 @@ class TestAutomationWorkflows:
             mode2 = device._build_response(3, "ES.GetMode", {})["result"]
 
             assert mode2["mode"] == "Passive"
-            assert status2["bat_power"] < 0
-            assert 2200 < abs(status2["bat_power"]) < 2700
+            # API bat_power: positive = charging, negative = discharging
+            # Internal power=-2500 (charging) -> API bat_power=+2500
+            assert status2["bat_power"] > 0
+            assert 2200 < status2["bat_power"] < 2700
 
             time.sleep(1.0)
 
@@ -61,7 +63,9 @@ class TestAutomationWorkflows:
             mode4 = device._build_response(6, "ES.GetMode", {})["result"]
 
             assert mode4["mode"] == "Auto"
-            assert status4["bat_power"] > 0
+            # In Auto mode with household load, battery discharges
+            # API bat_power: negative = discharging
+            assert status4["bat_power"] < 0
         finally:
             device.simulator.stop()
 
@@ -85,9 +89,11 @@ class TestAutomationWorkflows:
             mode = device._build_response(2, "ES.GetMode", {})["result"]
 
             assert mode["mode"] == "Passive"
-            assert status["bat_power"] > 0
+            # API bat_power: positive = charging, negative = discharging
+            # Internal power=2500 (discharging) -> API bat_power=-2500
+            assert status["bat_power"] < 0
             # Max discharge is 2500W with ~5% fluctuation
-            assert 2300 < status["bat_power"] < 2700
+            assert 2300 < abs(status["bat_power"]) < 2700
         finally:
             device.simulator.stop()
 
@@ -173,8 +179,10 @@ class TestAutomationWorkflows:
             final_status = device._build_response(999, "ES.GetStatus", {})["result"]
             final_mode = device._build_response(999, "ES.GetMode", {})["result"]
             assert final_mode["mode"] == "Passive"
-            assert final_status["bat_power"] < 0
-            assert 750 < abs(final_status["bat_power"]) < 850
+            # API bat_power: positive = charging, negative = discharging
+            # Internal power=-800 (charging) -> API bat_power=+800
+            assert final_status["bat_power"] > 0
+            assert 750 < final_status["bat_power"] < 850
         finally:
             device.simulator.stop()
 
@@ -195,7 +203,8 @@ class TestAutomationWorkflows:
             mode1 = device._build_response(2, "ES.GetMode", {})["result"]
             status1 = device._build_response(2, "ES.GetStatus", {})["result"]
             assert mode1["mode"] == "Passive"
-            assert status1["bat_power"] < 0
+            # API bat_power: positive = charging
+            assert status1["bat_power"] > 0
 
             time.sleep(3.0)
 
@@ -271,7 +280,8 @@ class TestGridPowerConsistency:
             })
 
             status1 = device._build_response(2, "ES.GetStatus", {})["result"]
-            assert status1["bat_power"] < 0
+            # API bat_power: positive = charging (internal power=-1500)
+            assert status1["bat_power"] > 0
 
             # Test discharging - grid import decreases
             device._build_response(3, "ES.SetMode", {
@@ -283,7 +293,8 @@ class TestGridPowerConsistency:
             })
 
             status2 = device._build_response(4, "ES.GetStatus", {})["result"]
-            assert status2["bat_power"] > 0
+            # API bat_power: negative = discharging (internal power=1500)
+            assert status2["bat_power"] < 0
             assert status2["ongrid_power"] < status1["ongrid_power"]
         finally:
             device.simulator.stop()
@@ -344,7 +355,8 @@ class TestConcurrentPolling:
             final_status = device._build_response(999, "ES.GetStatus", {})["result"]
             final_mode = device._build_response(999, "ES.GetMode", {})["result"]
             assert final_mode["mode"] == "Passive"
-            assert final_status["bat_power"] < 0
-            assert 1700 < abs(final_status["bat_power"]) < 1900
+            # API bat_power: positive = charging (internal power=-1800)
+            assert final_status["bat_power"] > 0
+            assert 1700 < final_status["bat_power"] < 1900
         finally:
             device.simulator.stop()

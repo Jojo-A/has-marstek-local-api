@@ -76,17 +76,17 @@ def parse_es_status_response(response: dict[str, Any]) -> dict[str, Any]:
     total_load_energy = result.get("total_load_energy", 0)
     
     # Calculate battery_status from bat_power direction
-    # Positive bat_power = discharging (selling), Negative = charging (buying)
+    # Positive bat_power = charging, Negative = discharging (per jaapp/Marstek convention)
     if bat_power > 0:
-        battery_status = "Selling"
+        battery_status = "charging"
     elif bat_power < 0:
-        battery_status = "Buying"
+        battery_status = "discharging"
     else:
-        battery_status = "Idle"
+        battery_status = "idle"
     
     return {
         "battery_soc": bat_soc,
-        "battery_power": abs(bat_power),  # Expose as absolute value for display
+        "battery_power": bat_power,  # Positive = charging, negative = discharging
         "battery_status": battery_status,
         "ongrid_power": ongrid_power,
         "offgrid_power": offgrid_power,
