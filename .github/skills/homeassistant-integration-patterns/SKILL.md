@@ -33,9 +33,26 @@ This skill helps you make correct, repo-consistent changes to this Home Assistan
 1. **Coordinator-only I/O**
    - Never add per-entity UDP calls.
    - Read everything from `MarstekDataUpdateCoordinator.data`.
+   - Use `_async_setup()` for one-time initialization during first refresh.
+   - Set `always_update=False` if data supports `__eq__` comparison.
 
 2. **Async-only**
    - Only do async I/O; never block the event loop.
+
+### Coordinator Error Handling
+```python
+async def _async_update_data(self):
+    try:
+        return await self.api.fetch_data()
+    except AuthError as err:
+        # Triggers reauth flow automatically
+        raise ConfigEntryAuthFailed from err
+    except RateLimitError:
+        # Backoff with retry_after
+        raise UpdateFailed(retry_after=60)
+    except ConnectionError as err:
+        raise UpdateFailed(f"Connection failed: {err}")
+```
 
 3. **Avoid unavailable clutter**
    - Only create entities when there’s a corresponding data key in coordinator output.
@@ -57,6 +74,79 @@ Steps:
 3. Keep the `unique_id` stable (BLE-MAC based + sensor key).
 4. If user-facing, add translation in `custom_components/marstek/translations/en.json` (and keep `strings.json` in sync).
 5. Only register entities for data keys that exist to avoid permanent `unavailable` noise.
+
+### Entity Patterns (Mandatory for New Integrations)
+
+```python
+class MarstekSensor(CoordinatorEntity, SensorEntity):
+    _attr_has_entity_name = True  # MANDATORY
+    
+    def __init__(self, coordinator, description):
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{coordinator.ble_mac}_{description.key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, coordinator.ble_mac)},
+            name=coordinator.device_name,
+            manufacturer="Marstek",
+        )
+```
+
+### EntityDescription Pattern (Recommended)
+
+```python
+@dataclass(kw_only=True)
+class MarstekSensorEntityDescription(SensorEntityDescription):
+    value_fn: Callable[[dict], StateType]
+    exists_fn: Callable[[dict], bool] = lambda _: True
+
+SENSORS: tuple[MarstekSensorEntityDescription, ...] = (
+    MarstekSensorEntityDescription(
+        key="battery_soc",
+        translation_key="battery_soc",
+        device_class=SensorDeviceClass.BATTERY,
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("soc"),
+    ),
+    MarstekSensorEntityDescription(
+        key="power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.get("power"),
+    ),
+)
+```
+
+### Icon Translations (Preferred over `icon` property)
+Create `icons.json`:
+```json
+{
+  "entity": {
+    "sensor": {
+      "battery_soc": {
+        "default": "mdi:battery",
+        "state": {
+          "100": "mdi:battery",
+          "50": "mdi:battery-50"
+        }
+      }
+    }
+  }
+}
+```
+
+### Entity Categories
+- `EntityCategory.DIAGNOSTIC` - RSSI, firmware version, temperature
+- `EntityCategory.CONFIG` - Settings the user can change
+- Set `entity_registry_enabled_default = False` for rarely-used sensors
+
+### State Classes for Energy Sensors
+- `SensorStateClass.MEASUREMENT` - Instantaneous values (power, temperature)
+- `SensorStateClass.TOTAL` - Values that can increase/decrease (net energy)
+- `SensorStateClass.TOTAL_INCREASING` - Only increases, resets to 0 (lifetime energy)
+- Use `SensorDeviceClass.ENERGY_STORAGE` for battery capacity (stored Wh)
 
 ## Common pitfalls
 

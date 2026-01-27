@@ -37,6 +37,8 @@ Reauth handles authentication/connection failures gracefully, allowing users to 
 ### Code Pattern
 
 ```python
+from homeassistant.config_entries import SOURCE_REAUTH
+
 async def async_step_reauth(
     self, entry_data: dict[str, Any]
 ) -> ConfigFlowResult:
@@ -55,12 +57,14 @@ async def async_step_reauth_confirm(
         try:
             device_info = await get_device_info(host=host, port=port)
             if device_info:
-                self.hass.config_entries.async_update_entry(
+                # Validate unique ID unchanged
+                await self.async_set_unique_id(device_info["ble_mac"])
+                self._abort_if_unique_id_mismatch()
+                # Preferred: use async_update_reload_and_abort helper
+                return self.async_update_reload_and_abort(
                     reauth_entry,
-                    data={**reauth_entry.data, CONF_HOST: host},
+                    data_updates={CONF_HOST: host},
                 )
-                await self.hass.config_entries.async_reload(reauth_entry.entry_id)
-                return self.async_abort(reason="reauth_successful")
             errors["base"] = "cannot_connect"
         except (OSError, TimeoutError):
             errors["base"] = "cannot_connect"
@@ -72,6 +76,13 @@ async def async_step_reauth_confirm(
         description_placeholders={"host": reauth_entry.data.get(CONF_HOST, "")},
     )
 ```
+
+### Key Helpers
+
+- `self._get_reauth_entry()` - Get the config entry being reauthenticated
+- `self.async_update_reload_and_abort()` - Update entry, reload, and abort with `reauth_successful` (preferred)
+- `self._abort_if_unique_id_mismatch()` - Ensure the same device is being reauthenticated
+- Check source: `if self.source == SOURCE_REAUTH:`
 
 ### Triggering Reauth
 
@@ -97,11 +108,79 @@ And abort reason:
 }
 ```
 
+## Form Patterns
+
+### Grouping Input Fields (sections)
+Use `section()` to group related fields into collapsible sections:
+```python
+from homeassistant.data_entry_flow import section
+
+data_schema = {
+    vol.Required("host"): str,
+    vol.Required("advanced_options"): section(
+        vol.Schema({
+            vol.Optional("timeout", default=30): int,
+            vol.Optional("retry_count", default=3): int,
+        }),
+        {"collapsed": True},  # Initially collapsed
+    )
+}
+```
+
+### Pre-filling Forms with Suggested Values
+```python
+from homeassistant.helpers.schema_config_entry_flow import add_suggested_values_to_schema
+
+return self.async_show_form(
+    data_schema=add_suggested_values_to_schema(
+        OPTIONS_SCHEMA, self.config_entry.options
+    )
+)
+```
+
+### Browser Autofill
+Use recognized keys (`username`, `password`) or `TextSelector` with `autocomplete`:
+```python
+vol.Required(CONF_USERNAME): TextSelector(
+    TextSelectorConfig(type=TextSelectorType.EMAIL, autocomplete="username")
+),
+```
+
+### Read-only Fields in Options
+For frozen configuration shown in options:
+```python
+vol.Optional(CONF_DEVICE_ID): EntitySelector(
+    EntitySelectorConfig(read_only=True)
+),
+```
+
+### Navigation Menu
+```python
+return self.async_show_menu(
+    step_id="user",
+    menu_options=["discovery", "manual"],
+    description_placeholders={"model": "Venus A"},
+)
+```
+
+### Long-running Tasks (Show Progress)
+```python
+if not self.task:
+    self.task = self.hass.async_create_task(long_running_operation())
+if not self.task.done():
+    return self.async_show_progress(
+        progress_action="connecting",
+        progress_task=self.task,
+    )
+return self.async_show_progress_done(next_step_id="finish")
+```
+
 ## Options Flow
 - Implement `async_get_options_flow` to return an `OptionsFlowHandler`.
 - Store runtime preferences in `entry.options`; keep credentials in `entry.data`.
 - Register `entry.add_update_listener` in `__init__.py` to reload on options change.
 - Use selectors for numeric intervals, toggles, enums, and text fields where helpful.
+- Use `add_suggested_values_to_schema()` to pre-fill current options.
 
 ## Discovery Handling
 - Manifest-driven discovery (dhcp/zeroconf/ssdp) should land in dedicated steps.
@@ -113,6 +192,51 @@ And abort reason:
 - Define user-facing errors in `strings.json` and mirror to `translations/en.json`.
 - Preferred keys: `cannot_connect`, `invalid_auth`, `already_configured`, `unknown`.
 - Provide helpful `description_placeholders` when useful (e.g., `{ip_address}`).
+
+## Form Translation Structure
+
+Config flow forms are translated via `strings.json`:
+
+```json
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Marstek",
+        "description": "Connect to your {model} device.",
+        "data": {
+          "host": "Hostname or IP",
+          "port": "Port"
+        },
+        "data_description": {
+          "host": "The IP address of your Marstek device on the local network"
+        },
+        "sections": {
+          "advanced_options": {
+            "name": "Advanced Options",
+            "description": "Optional configuration"
+          }
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to device",
+      "invalid_auth": "Invalid authentication"
+    },
+    "abort": {
+      "already_configured": "Device is already configured",
+      "reauth_successful": "Reauthentication successful"
+    }
+  }
+}
+```
+
+**Form translation keys:**
+- `title` - Form title
+- `description` - Form description (supports placeholders via `description_placeholders`)
+- `data` - Field labels (keyed by field name)
+- `data_description` - Field help text (shown below field)
+- `sections` - Section names and descriptions (for `section()` fields)
 
 ## Validation Checklist
 - [ ] Unique ID set from BLE-MAC/WiFi MAC; duplicates abort

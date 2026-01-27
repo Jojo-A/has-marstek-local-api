@@ -21,6 +21,30 @@ Use this skill to align changes with Home Assistant best practices and the Integ
 - **Separation**: Keep protocol/library logic outside entities; prefer a library (`requirements`) for raw API/UDP/HTTP handling.
 - **Quality Scale focus**: Bronze requires 100% config_flow coverage and connection tests; Silver pushes >95% overall coverage, strict typing, and reauth flows.
 
+### Coordinator Error Handling Patterns
+```python
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import UpdateFailed
+
+async def _async_update_data(self):
+    try:
+        return await self.api.fetch_data()
+    except AuthError as err:
+        # Triggers reauth flow automatically
+        raise ConfigEntryAuthFailed("Authentication failed") from err
+    except RateLimitError:
+        # Backoff with retry_after (seconds until retry)
+        raise UpdateFailed(retry_after=60)
+    except ConnectionError as err:
+        raise UpdateFailed(f"Connection failed: {err}")
+```
+
+### Coordinator Best Practices
+- Use `_async_setup()` for one-time initialization during first refresh
+- Set `always_update=False` if your data supports `__eq__` comparison (avoids unnecessary entity updates)
+- Use `async_contexts()` to track which entities are actively listening
+- Pass `config_entry` to coordinator constructor for automatic linking
+
 ## Config / Options / Reauth Patterns
 - **UI-first**: No new YAML; all setup via `config_flow.py` with selectors where helpful.
 - **Duplicate avoidance**: Abort if a device is already configured; update IP/host on existing entries when discovery reports changes.
@@ -29,10 +53,38 @@ Use this skill to align changes with Home Assistant best practices and the Integ
  - **Duplicate enforcement**: Set `unique_id` early and call `_abort_if_unique_id_configured()` for user/discovery steps.
 
 ## Entities & Registries
-- Set `_attr_has_entity_name = True`; names should be capability-only (device name is prepended by HA).
+- **`_attr_has_entity_name = True` is MANDATORY for new integrations**; entity name should be capability-only (device name is prepended by HA).
+- For the "main feature" entity of a device, set `_attr_name = None` to use only the device name.
 - Provide `device_info` with stable identifiers (prefer MAC/serial over IP); all entities for a device must share the same identifiers set.
 - Keep `unique_id` stable and predictable (e.g., `{ble_mac}_{key}`); changing it breaks history and customizations.
 - Only create entities for data that actually exists to avoid permanent `unavailable` noise.
+- Use `_attr_*` class/instance attributes pattern for cleaner code:
+  ```python
+  class MySensor(SensorEntity):
+      _attr_has_entity_name = True
+      _attr_device_class = SensorDeviceClass.POWER
+      _attr_native_unit_of_measurement = UnitOfPower.WATT
+  ```
+
+### EntityDescription Pattern (Recommended)
+
+For multiple similar entities, use EntityDescription for declarative definitions:
+
+```python
+@dataclass(kw_only=True)
+class MySensorEntityDescription(SensorEntityDescription):
+    value_fn: Callable[[DeviceData], StateType]
+    exists_fn: Callable[[DeviceData], bool] = lambda _: True
+
+SENSORS: tuple[MySensorEntityDescription, ...] = (
+    MySensorEntityDescription(
+        key="power",
+        device_class=SensorDeviceClass.POWER,
+        native_unit_of_measurement=UnitOfPower.WATT,
+        value_fn=lambda data: data.power,
+    ),
+)
+```
 
 ## Entity Best Practices
 - Use constants from `homeassistant.const` for units:
@@ -43,11 +95,28 @@ Use this skill to align changes with Home Assistant best practices and the Integ
   - `SensorDeviceClass.BATTERY` for battery level sensors
   - `SensorDeviceClass.POWER` for power sensors
   - `SensorDeviceClass.ENERGY` for energy sensors
+  - `SensorDeviceClass.ENERGY_STORAGE` for stored energy (battery capacity in Wh)
   - `SensorDeviceClass.TEMPERATURE` for temperature sensors
 - Use state classes appropriately:
   - `SensorStateClass.MEASUREMENT` for instantaneous values (power, temperature)
-  - `SensorStateClass.TOTAL_INCREASING` for cumulative energy counters
+  - `SensorStateClass.TOTAL` for values that can increase/decrease (net energy)
+  - `SensorStateClass.TOTAL_INCREASING` for cumulative counters that only increase
 - Use `EntityCategory.DIAGNOSTIC` for non-primary sensors (WiFi RSSI, temperatures)
+- Set `entity_registry_enabled_default = False` for diagnostic or rarely-used sensors
+- Use `suggested_display_precision` to control decimal places shown in UI
+- Use `_unrecorded_attributes` frozenset to exclude high-frequency attributes from recorder
+
+### Restoring Sensor State
+Use `RestoreSensor` (not `RestoreEntity`) to restore sensor state after restart:
+```python
+from homeassistant.components.sensor import RestoreSensor
+
+class MyEnergySensor(RestoreSensor):
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_sensor_data()):
+            self._attr_native_value = last.native_value
+```
 
 ## Diagnostics (Gold Quality Scale)
 - Create `diagnostics.py` with `async_get_config_entry_diagnostics` function
@@ -62,6 +131,25 @@ Use this skill to align changes with Home Assistant best practices and the Integ
         return {k: "**REDACTED**" if k in TO_REDACT else v for k, v in data.items()}
     ```
 - Test diagnostics with snapshot tests and verify redaction
+
+## Quality Scale Tracking
+
+Integrations working toward Bronze/Silver/Gold should maintain a `quality_scale.yaml`:
+
+```yaml
+rules:
+  config_flow: done
+  test_before_setup: done
+  unique_config_entry: done
+  diagnostics:
+    status: done
+    comment: Added in v0.2.0
+  reauthentication-flow:
+    status: exempt
+    comment: Device has no authentication
+```
+
+Statuses: `done`, `todo`, `exempt` (with comment explaining why).
 
 ## Manifest & Metadata
 - Pin requirements (e.g., `pymarstek==x.y.z`) to avoid breaking upgrades.

@@ -150,15 +150,35 @@ jobs:
       - run: pytest tests/ -v --cov=custom_components/marstek
 ```
 
+## GitHub Repository Requirements
+
+Your repository must meet these requirements for HACS:
+
+- **Repository is public** on GitHub
+- **Has a description** - Brief summary of what the integration does
+- **Issues enabled** - Users need a way to report problems
+- **Topics defined** - Add relevant topics like `home-assistant`, `hacs`, `custom-component`
+- **Has at least one release** - Full GitHub release (not just a tag)
+- **Not archived** - Repository must be active
+
 ## HACS Default Repository Inclusion
 
 For inclusion in HACS default repositories (optional, higher bar):
 
-1. **All CI workflows pass** - hassfest, HACS action, tests
-2. **GitHub releases** - Use semantic versioning tags (v0.1.0)
-3. **Home Assistant Brands** - Submit to [home-assistant/brands](https://github.com/home-assistant/brands)
+1. **All CI workflows pass** - hassfest, HACS action, tests (no errors or ignores)
+2. **GitHub releases** - Use semantic versioning tags (v0.1.0) - releases required, not just tags
+3. **Home Assistant Brands** - Submit to [home-assistant/brands](https://github.com/home-assistant/brands) for icon/logo
 4. **Quality documentation** - Clear README with installation, configuration, usage
 5. **Active maintenance** - Responsive to issues and PRs
+6. **Owner/major contributor submits PR** - Only repo owners or major contributors can submit
+
+### Submitting to HACS Default
+
+1. Fork [hacs/default](https://github.com/hacs/default)
+2. Create a new branch from `master` (never use master directly)
+3. Add repository URL to `integration` file (alphabetically sorted)
+4. Submit PR with editable permissions (not from organization account)
+5. Fill out PR template completely and accurately
 
 ## Version Management
 
