@@ -133,11 +133,18 @@ class MarstekOperatingModeSelect(
     async def async_select_option(self, option: str) -> None:
         """Change the operating mode."""
         if option not in OPERATING_MODES:
-            raise HomeAssistantError(f"Invalid operating mode: {option}")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="invalid_mode",
+                translation_placeholders={"mode": option},
+            )
 
         host = self._config_entry.data.get(CONF_HOST)
         if not host:
-            raise HomeAssistantError("Device IP address not configured")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="no_host_configured",
+            )
 
         # Build mode configuration
         config = self._build_mode_config(option)
@@ -182,7 +189,9 @@ class MarstekOperatingModeSelect(
 
             if not success:
                 raise HomeAssistantError(
-                    f"Failed to set operating mode to {option}: {last_error}"
+                    translation_domain=DOMAIN,
+                    translation_key="mode_change_failed",
+                    translation_placeholders={"mode": option, "error": last_error or "Unknown error"},
                 )
 
             # Request coordinator refresh to update state

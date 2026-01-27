@@ -140,7 +140,10 @@ def _get_device_id_from_call(call: ServiceCall) -> str:
     """Extract device_id from service call data."""
     device_id = call.data.get(ATTR_DEVICE_ID)
     if not device_id:
-        raise HomeAssistantError("No device specified. Please select a device.")
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="no_device_specified",
+        )
     return device_id
 
 
@@ -152,7 +155,11 @@ def _get_entry_and_client_from_device_id(
     device = device_registry.async_get(device_id)
 
     if not device:
-        raise HomeAssistantError(f"Device not found: {device_id}")
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="invalid_device",
+            translation_placeholders={"device_id": device_id},
+        )
 
     # Find the Marstek config entry for this device
     for entry_id in device.config_entries:
@@ -163,7 +170,11 @@ def _get_entry_and_client_from_device_id(
             if host:
                 return entry, runtime_data.udp_client, host
 
-    raise HomeAssistantError(f"No loaded Marstek config entry found for device: {device_id}")
+    raise HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key="no_config_entry",
+        translation_placeholders={"device_id": device_id},
+    )
 
 
 async def _send_mode_command(
@@ -208,7 +219,11 @@ async def _send_mode_command(
                     await asyncio.sleep(RETRY_DELAY)
 
         if not success:
-            raise HomeAssistantError(f"Failed to send command: {last_error}")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="command_failed",
+                translation_placeholders={"error": last_error or "Unknown error"},
+            )
 
     finally:
         await udp_client.resume_polling(host)

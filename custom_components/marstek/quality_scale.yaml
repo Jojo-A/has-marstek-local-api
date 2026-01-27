@@ -59,7 +59,9 @@ rules:
   entity-translations:
     status: done
     comment: All entities use translation_key for proper localization
-  exception-translations: todo
+  exception-translations:
+    status: done
+    comment: All exceptions use translation_domain, translation_key, and translation_placeholders
   icon-translations:
     status: done
     comment: Created icons.json with icons for all sensor and select entities

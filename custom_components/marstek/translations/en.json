@@ -283,6 +283,15 @@
     }
   },
   "exceptions": {
+    "no_device_specified": {
+      "message": "No device specified. Please select a device."
+    },
+    "invalid_device": {
+      "message": "Device {device_id} not found"
+    },
+    "no_config_entry": {
+      "message": "No loaded Marstek config entry found for device: {device_id}"
+    },
     "invalid_mode": {
       "message": "Invalid operating mode: {mode}"
     },
@@ -292,11 +301,8 @@
     "mode_change_failed": {
       "message": "Failed to set operating mode to {mode}: {error}"
     },
-    "invalid_device": {
-      "message": "Device {device_id} not found"
-    },
     "command_failed": {
-      "message": "Failed to execute command: {error}"
+      "message": "Failed to send command: {error}"
     }
   }
 }

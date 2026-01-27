@@ -228,7 +228,7 @@ async def test_select_mode_all_retries_fail(hass: HomeAssistant, mock_config_ent
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-        with pytest.raises(HomeAssistantError, match="Failed to set operating mode"):
+        with pytest.raises(HomeAssistantError, match="mode_change_failed|Failed to set"):
             await hass.services.async_call(
                 "select",
                 "select_option",
@@ -255,3 +255,26 @@ async def test_select_entity_created_with_valid_data(
         state = hass.states.get("select.marstek_venus_v3_1_2_3_4_operating_mode")
         assert state is not None
         assert state.state == MODE_MANUAL
+
+
+async def test_select_invalid_mode(
+    hass: HomeAssistant, mock_config_entry
+):
+    """Test select raises error for invalid operating mode."""
+    mock_config_entry.add_to_hass(hass)
+
+    client = _mock_client(status={"battery_soc": 55, "device_mode": MODE_AUTO})
+    with _patch_all(client=client):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        with pytest.raises(HomeAssistantError, match="invalid_mode"):
+            await hass.services.async_call(
+                "select",
+                "select_option",
+                {
+                    "entity_id": "select.marstek_venus_v3_1_2_3_4_operating_mode",
+                    "option": "invalid_mode_option",
+                },
+                blocking=True,
+            )

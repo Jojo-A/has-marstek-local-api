@@ -202,7 +202,7 @@ async def test_service_invalid_device_id(
         await hass.async_block_till_done()
 
         # Call service with invalid device ID
-        with pytest.raises(HomeAssistantError, match="Device not found"):
+        with pytest.raises(HomeAssistantError, match="invalid_device"):
             await hass.services.async_call(
                 DOMAIN,
                 SERVICE_SET_PASSIVE_MODE,
@@ -287,7 +287,7 @@ async def test_service_command_all_retries_fail(
         )
         assert device is not None
 
-        with pytest.raises(HomeAssistantError, match="Failed to send command"):
+        with pytest.raises(HomeAssistantError, match="command_failed|Failed to send"):
             await hass.services.async_call(
                 DOMAIN,
                 SERVICE_SET_PASSIVE_MODE,
