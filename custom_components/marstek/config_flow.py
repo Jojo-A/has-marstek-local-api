@@ -164,7 +164,7 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     device_mac and format_mac(device_mac) in configured_macs
                 )
                 if is_configured:
-                    already_configured_names.append(f"{device_name} (already added)")
+                    already_configured_names.append(device_name)
                 else:
                     device_options[str(i)] = device_name
 
@@ -175,14 +175,14 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors={"base": "all_devices_configured"}
                 )
 
-            # Build description showing already configured devices if any
-            description_lines = [f"- {name}" for name in device_options.values()]
+            # Build description showing already configured devices only
             if already_configured_names:
-                description_lines.append("")
-                description_lines.append("Already configured:")
-                description_lines.extend(
-                    [f"- {name}" for name in already_configured_names]
+                description_lines = [f"- {name}" for name in already_configured_names]
+                already_configured_text = (
+                    "\n\nAlready configured devices:\n" + "\n".join(description_lines)
                 )
+            else:
+                already_configured_text = ""
 
             return self.async_show_form(
                 step_id="user",
@@ -190,7 +190,7 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     {vol.Required("device"): vol.In(device_options)}
                 ),
                 description_placeholders={
-                    "devices": "\n".join(description_lines)
+                    "already_configured": already_configured_text
                 },
             )
 
