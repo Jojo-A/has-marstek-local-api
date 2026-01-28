@@ -300,6 +300,10 @@ async def test_all_new_sensors_with_full_status(
         # WiFi
         "wifi_rssi": -58,
         "wifi_ssid": "TestNetwork",
+        "wifi_sta_ip": "192.168.1.50",
+        "wifi_sta_gate": "192.168.1.1",
+        "wifi_sta_mask": "255.255.255.0",
+        "wifi_sta_dns": "192.168.1.1",
         # CT / Energy Meter
         "ct_state": 1,
         "ct_connected": True,
@@ -311,6 +315,8 @@ async def test_all_new_sensors_with_full_status(
         "bat_temp": 27.5,
         "bat_charg_flag": 1,
         "bat_dischrg_flag": 1,
+        "bat_capacity": 2508,
+        "bat_rated_capacity": 2560,
     }
 
     client = create_mock_client(status=status)
@@ -333,7 +339,43 @@ async def test_all_new_sensors_with_full_status(
         )
         assert (
             entity_registry.async_get(
+                "sensor.marstek_venus_v3_1_2_3_4_wi_fi_ip_address"
+            )
+            is not None
+        )
+        assert (
+            entity_registry.async_get(
+                "sensor.marstek_venus_v3_1_2_3_4_wi_fi_gateway"
+            )
+            is not None
+        )
+        assert (
+            entity_registry.async_get(
+                "sensor.marstek_venus_v3_1_2_3_4_wi_fi_subnet_mask"
+            )
+            is not None
+        )
+        assert (
+            entity_registry.async_get(
+                "sensor.marstek_venus_v3_1_2_3_4_wi_fi_dns"
+            )
+            is not None
+        )
+        assert (
+            entity_registry.async_get(
                 "binary_sensor.marstek_venus_v3_1_2_3_4_ct_connection"
+            )
+            is not None
+        )
+        assert (
+            entity_registry.async_get(
+                "binary_sensor.marstek_venus_v3_1_2_3_4_charge_permission"
+            )
+            is not None
+        )
+        assert (
+            entity_registry.async_get(
+                "binary_sensor.marstek_venus_v3_1_2_3_4_discharge_permission"
             )
             is not None
         )
@@ -345,6 +387,18 @@ async def test_all_new_sensors_with_full_status(
         )
         assert (
             hass.states.get("sensor.marstek_venus_v3_1_2_3_4_grid_total_power")
+            is not None
+        )
+        assert (
+            entity_registry.async_get(
+                "sensor.marstek_venus_v3_1_2_3_4_battery_remaining_capacity"
+            )
+            is not None
+        )
+        assert (
+            entity_registry.async_get(
+                "sensor.marstek_venus_v3_1_2_3_4_battery_rated_capacity"
+            )
             is not None
         )
         

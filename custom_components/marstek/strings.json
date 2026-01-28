@@ -140,8 +140,26 @@
       "wifi_rssi": {
         "name": "WiFi signal strength"
       },
+      "wifi_ip_address": {
+        "name": "Wi-Fi IP address"
+      },
+      "wifi_gateway": {
+        "name": "Wi-Fi gateway"
+      },
+      "wifi_subnet_mask": {
+        "name": "Wi-Fi subnet mask"
+      },
+      "wifi_dns": {
+        "name": "Wi-Fi DNS"
+      },
       "battery_temperature": {
         "name": "Battery temperature"
+      },
+      "battery_remaining_capacity": {
+        "name": "Battery remaining capacity"
+      },
+      "battery_rated_capacity": {
+        "name": "Battery rated capacity"
       },
       "grid_total_power": {
         "name": "Grid total power"
@@ -252,6 +270,12 @@
           "on": "Connected",
           "off": "Not connected"
         }
+      },
+      "charge_permission": {
+        "name": "Charge permission"
+      },
+      "discharge_permission": {
+        "name": "Discharge permission"
       }
     }
   },

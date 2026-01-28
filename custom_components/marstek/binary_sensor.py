@@ -87,6 +87,66 @@ class MarstekCTConnectionBinarySensor(
         return self.coordinator.data.get("ct_connected")
 
 
+class MarstekBatteryPermissionBinarySensor(
+    CoordinatorEntity[MarstekDataUpdateCoordinator], BinarySensorEntity
+):
+    """Representation of Marstek battery permission binary sensors."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator: MarstekDataUpdateCoordinator,
+        device_info: dict[str, Any],
+        config_entry: ConfigEntry | None,
+        *,
+        key: str,
+        translation_key: str,
+    ) -> None:
+        """Initialize the battery permission binary sensor."""
+        super().__init__(coordinator)
+        self._device_info = device_info
+        self._config_entry = config_entry
+        self._value_key = key
+        self._attr_translation_key = translation_key
+
+        device_identifier_raw = (
+            device_info.get("ble_mac")
+            or device_info.get("mac")
+            or device_info.get("wifi_mac")
+        )
+        if not device_identifier_raw:
+            raise ValueError("Marstek device identifier (MAC) is required")
+        device_identifier = format_mac(device_identifier_raw)
+
+        device_ip = (
+            config_entry.data.get(CONF_HOST)
+            if config_entry
+            else device_info.get("ip", "Unknown")
+        )
+
+        self._attr_unique_id = f"{device_identifier}_{key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, device_identifier)},
+            name=f"Marstek {device_info['device_type']} v{device_info['version']} ({device_ip})",
+            manufacturer="Marstek",
+            model=device_info["device_type"],
+            sw_version=str(device_info["version"]),
+        )
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return true if the permission flag is enabled."""
+        if not self.coordinator.data:
+            return None
+        value = self.coordinator.data.get(self._value_key)
+        if value is None:
+            return None
+        return bool(value)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: MarstekConfigEntry,
@@ -98,6 +158,20 @@ async def async_setup_entry(
 
     entities: list[BinarySensorEntity] = [
         MarstekCTConnectionBinarySensor(coordinator, device_info, config_entry),
+        MarstekBatteryPermissionBinarySensor(
+            coordinator,
+            device_info,
+            config_entry,
+            key="bat_charg_flag",
+            translation_key="charge_permission",
+        ),
+        MarstekBatteryPermissionBinarySensor(
+            coordinator,
+            device_info,
+            config_entry,
+            key="bat_dischrg_flag",
+            translation_key="discharge_permission",
+        ),
     ]
 
     async_add_entities(entities)

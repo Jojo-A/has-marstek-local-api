@@ -151,6 +151,42 @@ SENSORS: tuple[MarstekSensorEntityDescription, ...] = (
         ),
     ),
     MarstekSensorEntityDescription(
+        key="wifi_sta_ip",
+        translation_key="wifi_ip_address",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda coordinator, _info, _entry: (
+            _value_from_data("wifi_sta_ip", coordinator.data or {})
+        ),
+    ),
+    MarstekSensorEntityDescription(
+        key="wifi_sta_gate",
+        translation_key="wifi_gateway",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda coordinator, _info, _entry: (
+            _value_from_data("wifi_sta_gate", coordinator.data or {})
+        ),
+    ),
+    MarstekSensorEntityDescription(
+        key="wifi_sta_mask",
+        translation_key="wifi_subnet_mask",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda coordinator, _info, _entry: (
+            _value_from_data("wifi_sta_mask", coordinator.data or {})
+        ),
+    ),
+    MarstekSensorEntityDescription(
+        key="wifi_sta_dns",
+        translation_key="wifi_dns",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda coordinator, _info, _entry: (
+            _value_from_data("wifi_sta_dns", coordinator.data or {})
+        ),
+    ),
+    MarstekSensorEntityDescription(
         key="bat_temp",
         translation_key="battery_temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
@@ -159,6 +195,30 @@ SENSORS: tuple[MarstekSensorEntityDescription, ...] = (
         suggested_display_precision=1,
         value_fn=lambda coordinator, _info, _entry: (
             _value_from_data("bat_temp", coordinator.data or {})
+        ),
+    ),
+    MarstekSensorEntityDescription(
+        key="bat_capacity",
+        translation_key="battery_remaining_capacity",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda coordinator, _info, _entry: (
+            _value_from_data("bat_capacity", coordinator.data or {})
+        ),
+    ),
+    MarstekSensorEntityDescription(
+        key="bat_rated_capacity",
+        translation_key="battery_rated_capacity",
+        native_unit_of_measurement=UnitOfEnergy.WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+        value_fn=lambda coordinator, _info, _entry: (
+            _value_from_data("bat_rated_capacity", coordinator.data or {})
         ),
     ),
     MarstekSensorEntityDescription(

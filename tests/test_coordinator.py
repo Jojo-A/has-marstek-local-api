@@ -7,9 +7,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from custom_components.marstek.const import DOMAIN
+from custom_components.marstek.const import CONF_POLL_INTERVAL_SLOW, DOMAIN
 from custom_components.marstek.coordinator import MarstekDataUpdateCoordinator
 
 
@@ -83,6 +84,37 @@ async def test_coordinator_successful_update(
     assert data["battery_power"] == 100
     assert data["device_mode"] == "auto"
     mock_udp_client.get_device_status.assert_called_once()
+
+
+async def test_coordinator_skips_wifi_status_when_disabled(
+    hass: HomeAssistant, mock_config_entry, mock_udp_client
+):
+    """Test that Wifi.GetStatus is skipped when WiFi diagnostics are disabled."""
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry, options={CONF_POLL_INTERVAL_SLOW: 0}
+    )
+
+    entity_registry = er.async_get(hass)
+    entity_registry.async_get_or_create(
+        domain="sensor",
+        platform=DOMAIN,
+        unique_id="aa:bb:cc:dd:ee:ff_wifi_rssi",
+        config_entry=mock_config_entry,
+        disabled_by=er.RegistryEntryDisabler.INTEGRATION,
+    )
+
+    coordinator = MarstekDataUpdateCoordinator(
+        hass,
+        mock_config_entry,
+        mock_udp_client,
+        "1.2.3.4",
+    )
+
+    await coordinator._async_update_data()
+
+    kwargs = mock_udp_client.get_device_status.call_args.kwargs
+    assert kwargs["include_wifi"] is False
 
 
 async def test_coordinator_polling_paused_returns_cached_data(

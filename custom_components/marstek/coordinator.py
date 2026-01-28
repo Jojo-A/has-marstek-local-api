@@ -160,17 +160,28 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         )
 
-    def _is_wifi_rssi_enabled(self) -> bool:
-        """Return True if the WiFi RSSI entity is enabled for this entry."""
+    def _is_wifi_status_enabled(self) -> bool:
+        """Return True if any WiFi status entity is enabled for this entry."""
         if not self.config_entry:
             return False
+        wifi_keys = {
+            "wifi_rssi",
+            "wifi_sta_ip",
+            "wifi_sta_gate",
+            "wifi_sta_mask",
+            "wifi_sta_dns",
+        }
         entity_registry = er.async_get(self.hass)
         entries = er.async_entries_for_config_entry(
             entity_registry, self.config_entry.entry_id
         )
         for entry in entries:
-            if entry.unique_id and entry.unique_id.endswith("_wifi_rssi"):
-                return entry.disabled_by is None
+            if not entry.unique_id:
+                continue
+            for key in wifi_keys:
+                if entry.unique_id.endswith(f"_{key}"):
+                    if entry.disabled_by is None:
+                        return True
         return False
 
     @property
@@ -218,7 +229,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         
         # WiFi and battery details - slow interval
         include_slow = (current_time - self._last_slow_fetch) >= slow_interval
-        include_wifi = include_slow and self._is_wifi_rssi_enabled()
+        include_wifi = include_slow and self._is_wifi_status_enabled()
         
         # Get configured timeout
         request_timeout = self._get_request_timeout()
