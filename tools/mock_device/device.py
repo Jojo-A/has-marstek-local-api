@@ -183,7 +183,9 @@ class MockMarstekDevice:
         elif method == "ES.GetStatus":
             # State includes energy stats from simulator
             state_with_capacity = {**state, "capacity_wh": self.simulator.capacity_wh}
-            return handle_es_get_status(request_id, src, state_with_capacity)
+            return handle_es_get_status(
+                request_id, src, state_with_capacity, self.config.get("device", "")
+            )
 
         elif method == "ES.GetMode":
             return handle_es_get_mode(request_id, src, state)

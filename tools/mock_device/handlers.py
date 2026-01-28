@@ -40,7 +40,7 @@ def handle_ble_get_status(
 
 
 def handle_es_get_status(
-    request_id: int, src: str, state: dict[str, Any]
+    request_id: int, src: str, state: dict[str, Any], device_type: str
 ) -> dict[str, Any]:
     """Handle ES.GetStatus request with full energy stats per API spec.
     
@@ -53,7 +53,7 @@ def handle_es_get_status(
     """
     # Negate power: internal +discharge/-charge → API +charge/-discharge
     bat_power = -state["power"]
-    return {
+    result: dict[str, Any] = {
         "id": request_id,
         "src": src,
         "result": {
@@ -63,13 +63,18 @@ def handle_es_get_status(
             "pv_power": state.get("pv_power", 0),
             "ongrid_power": state["grid_power"],
             "offgrid_power": 0,
-            "bat_power": bat_power,
             "total_pv_energy": state.get("total_pv_energy", 0),
             "total_grid_output_energy": state.get("total_grid_output_energy", 0),
             "total_grid_input_energy": state.get("total_grid_input_energy", 0),
             "total_load_energy": state.get("total_load_energy", 0),
         },
     }
+
+    device_type_normalized = device_type.lower()
+    if "venusa" not in device_type_normalized and "venus a" not in device_type_normalized:
+        result["result"]["bat_power"] = bat_power
+
+    return result
 
 
 def handle_es_get_mode(
