@@ -35,6 +35,8 @@ from .const import (
     DATA_UDP_CLIENT,
     DEFAULT_UDP_PORT,
     DOMAIN,
+    MODE_MANUAL,
+    MODE_PASSIVE,
     OPERATING_MODES,
 )
 from .coordinator import MarstekDataUpdateCoordinator
@@ -119,6 +121,18 @@ class MarstekOperatingModeSelect(
                 translation_domain=DOMAIN,
                 translation_key="invalid_mode",
                 translation_placeholders={"mode": option},
+            )
+
+        # Block Passive/Manual selection - these require parameters via services
+        if option == MODE_PASSIVE:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="passive_mode_requires_service",
+            )
+        if option == MODE_MANUAL:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="manual_mode_requires_service",
             )
 
         host = self._config_entry.data.get(CONF_HOST)

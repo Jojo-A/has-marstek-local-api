@@ -120,8 +120,6 @@ async def test_select_entity_options(hass: HomeAssistant, mock_config_entry):
     [
         (MODE_AUTO, "auto_cfg"),
         (MODE_AI, "ai_cfg"),
-        (MODE_MANUAL, "manual_cfg"),
-        (MODE_PASSIVE, "passive_cfg"),
     ],
 )
 async def test_select_mode_sends_command(
@@ -189,12 +187,13 @@ async def test_select_mode_command_failure_retries(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
+        # Use AUTO mode since PASSIVE is blocked at select level
         await hass.services.async_call(
             "select",
             "select_option",
             {
                 "entity_id": "select.marstek_venus_v3_operating_mode",
-                "option": MODE_PASSIVE,
+                "option": MODE_AUTO,
             },
             blocking=True,
         )
@@ -275,6 +274,36 @@ async def test_select_invalid_mode(
                 {
                     "entity_id": "select.marstek_venus_v3_operating_mode",
                     "option": "invalid_mode_option",
+                },
+                blocking=True,
+            )
+
+
+@pytest.mark.parametrize(
+    "mode,expected_message_part",
+    [
+        (MODE_PASSIVE, "Passive mode requires power and duration"),
+        (MODE_MANUAL, "Manual mode requires schedule configuration"),
+    ],
+)
+async def test_select_passive_manual_blocked(
+    hass: HomeAssistant, mock_config_entry, mode, expected_message_part
+):
+    """Test selecting Passive/Manual modes raises error directing user to services."""
+    mock_config_entry.add_to_hass(hass)
+
+    client = _mock_client(status={"battery_soc": 55, "device_mode": MODE_AUTO})
+    with _patch_all(client=client):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        with pytest.raises(HomeAssistantError, match=expected_message_part):
+            await hass.services.async_call(
+                "select",
+                "select_option",
+                {
+                    "entity_id": "select.marstek_venus_v3_operating_mode",
+                    "option": mode,
                 },
                 blocking=True,
             )
