@@ -131,6 +131,21 @@ class TestDeviceResponses:
         finally:
             device.simulator.stop()
 
+    def test_es_get_status_venus_a_omits_bat_power(self) -> None:
+        """Test VenusA ES.GetStatus omits bat_power field."""
+        device = MockMarstekDevice(
+            port=30020,
+            simulate=False,
+            device_config={"device": "VenusA 3.0", "ver": 145},
+        )
+
+        response = device._build_response(1, "ES.GetStatus", {})
+
+        assert response is not None
+        result = response["result"]
+        assert "bat_soc" in result
+        assert "bat_power" not in result
+
 
 class TestDeviceDiscovery:
     """Tests for device discovery responses."""
