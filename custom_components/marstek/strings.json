@@ -421,9 +421,22 @@
       "fix_flow": {
         "step": {
           "init": {
-            "title": "Reconfigure device connection",
-            "description": "The device at {host} is not responding. Click submit to update the connection settings."
+            "title": "Update device connection",
+            "description": "The device at {host} is not responding. Update the connection settings if the IP has changed.",
+            "data": {
+              "host": "IP address",
+              "port": "Port"
+            },
+            "data_description": {
+              "host": "IP address of your Marstek device",
+              "port": "UDP port (default: 30000)"
+            }
           }
+        },
+        "error": {
+          "cannot_connect": "Unable to connect to the device",
+          "invalid_discovery_info": "Invalid discovery information received from the device",
+          "unique_id_mismatch": "The device at this address is a different device"
         },
         "abort": {
           "entry_not_found": "The configuration entry was not found."

@@ -1,6 +1,6 @@
 """Tests for the Marstek repairs module."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -70,12 +70,15 @@ async def test_repair_flow_shows_form(
     assert result["type"] == "form"
     assert result["step_id"] == "init"
     assert result["description_placeholders"]["host"] == mock_config_entry.data["host"]
+    # Verify form has host and port fields
+    assert "host" in result["data_schema"].schema
+    assert "port" in result["data_schema"].schema
 
 
-async def test_repair_flow_submit_starts_reconfigure(
+async def test_repair_flow_submit_updates_entry(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test submitting repair flow starts reconfigure and clears issue."""
+    """Test submitting repair flow updates config entry and clears issue."""
     mock_config_entry.add_to_hass(hass)
     
     # Create the issue first
@@ -99,17 +102,29 @@ async def test_repair_flow_submit_starts_reconfigure(
     flow.hass = hass
     flow.issue_id = issue_id
 
-    with patch.object(
-        hass.config_entries.flow, "async_init", return_value={"type": "form"}
-    ) as mock_init:
-        result = await flow.async_step_init({})
+    device_info = {
+        "ip": "192.168.1.100",
+        "ble_mac": "AA:BB:CC:DD:EE:FF",
+        "device_type": "Venus",
+    }
 
-    # Verify reconfigure flow was started
-    mock_init.assert_called_once()
-    call_args = mock_init.call_args
-    assert call_args[0][0] == DOMAIN
-    assert call_args[1]["context"]["source"] == "reconfigure"
-    assert call_args[1]["context"]["entry_id"] == mock_config_entry.entry_id
+    with (
+        patch(
+            "custom_components.marstek.repairs.get_device_info",
+            return_value=device_info,
+        ),
+        patch.object(
+            hass.config_entries, "async_reload", new_callable=AsyncMock
+        ) as mock_reload,
+    ):
+        result = await flow.async_step_init({"host": "192.168.1.100", "port": 30000})
+
+    # Verify entry was updated
+    assert mock_config_entry.data["host"] == "192.168.1.100"
+    assert mock_config_entry.data["port"] == 30000
+    
+    # Verify reload was called
+    mock_reload.assert_called_once_with(mock_config_entry.entry_id)
     
     # Verify flow completed
     assert result["type"] == "create_entry"
@@ -117,3 +132,50 @@ async def test_repair_flow_submit_starts_reconfigure(
 
     # Verify issue was deleted
     assert issue_registry.async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_repair_flow_cannot_connect(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test repair flow shows error when device cannot be reached."""
+    mock_config_entry.add_to_hass(hass)
+
+    flow = CannotConnectRepairFlow(mock_config_entry.entry_id)
+    flow.hass = hass
+    flow.issue_id = f"cannot_connect_{mock_config_entry.entry_id}"
+
+    with patch(
+        "custom_components.marstek.repairs.get_device_info",
+        side_effect=TimeoutError("timeout"),
+    ):
+        result = await flow.async_step_init({"host": "192.168.1.100", "port": 30000})
+
+    assert result["type"] == "form"
+    assert result["errors"]["base"] == "cannot_connect"
+
+
+async def test_repair_flow_unique_id_mismatch(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test repair flow shows error when device is different."""
+    mock_config_entry.add_to_hass(hass)
+
+    flow = CannotConnectRepairFlow(mock_config_entry.entry_id)
+    flow.hass = hass
+    flow.issue_id = f"cannot_connect_{mock_config_entry.entry_id}"
+
+    # Return a device with different MAC
+    device_info = {
+        "ip": "192.168.1.100",
+        "ble_mac": "11:22:33:44:55:66",  # Different MAC
+        "device_type": "Venus",
+    }
+
+    with patch(
+        "custom_components.marstek.repairs.get_device_info",
+        return_value=device_info,
+    ):
+        result = await flow.async_step_init({"host": "192.168.1.100", "port": 30000})
+
+    assert result["type"] == "form"
+    assert result["errors"]["base"] == "unique_id_mismatch"
