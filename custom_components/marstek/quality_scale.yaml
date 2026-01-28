@@ -40,7 +40,9 @@ rules:
   # Gold
   devices: done
   diagnostics: done
-  discovery-update-info: todo
+  discovery-update-info:
+    status: done
+    comment: _async_handle_discovery_with_unique_id updates config entry IP when device is rediscovered via scanner or DHCP
   discovery:
     status: exempt
     comment: Integration uses UDP broadcast discovery via async_step_user, not standard discovery methods
@@ -50,7 +52,9 @@ rules:
   docs-supported-devices: done
   docs-supported-functions: done
   docs-troubleshooting: done
-  dynamic-devices: todo
+  dynamic-devices:
+    status: exempt
+    comment: Integration represents single device per config entry; users add multiple devices via separate config entries
   entity-category:
     status: done
     comment: Diagnostic sensors (WiFi RSSI, CT connection, battery temp) use EntityCategory.DIAGNOSTIC
