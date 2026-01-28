@@ -606,3 +606,174 @@ async def test_reconfigure_flow_cannot_connect(
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "reconfigure_confirm"
     assert result["errors"]["base"] == "cannot_connect"
+
+
+async def test_manual_flow_value_error(hass: HomeAssistant) -> None:
+    """Test manual entry flow when device returns ValueError (invalid data)."""
+    # First trigger discovery that finds no devices to get to manual step
+    with _patch_discovery([]):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        assert result["step_id"] == "manual"
+
+    # Submit manual entry that raises ValueError
+    with _patch_manual_connection(error=ValueError("Invalid device data")):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], user_input={"host": "192.168.1.100", "port": 30000}
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "manual"
+    assert result["errors"] == {"base": "invalid_discovery_info"}
+
+
+async def test_reauth_flow_empty_host(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test reauth flow with empty host shows error."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await mock_config_entry.start_reauth_flow(hass)
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+
+    # Submit empty host - should show form with error
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={"host": ""},
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["base"] == "cannot_connect"
+
+
+async def test_reconfigure_flow_empty_host(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test reconfigure flow with empty host shows error."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": mock_config_entry.entry_id},
+        data=None,
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reconfigure_confirm"
+
+    # Submit empty host - should show form with error
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        user_input={"host": "", "port": 30000},
+    )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["base"] == "cannot_connect"
+
+
+async def test_reconfigure_flow_device_returns_none(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test reconfigure flow when device returns None shows error."""
+    mock_config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": mock_config_entry.entry_id},
+        data=None,
+    )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "reconfigure_confirm"
+
+    with _patch_manual_connection(device_info=None):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={"host": "192.168.1.201", "port": 30000},
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["base"] == "cannot_connect"
+
+
+async def test_dhcp_unchanged_ip(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test DHCP discovery with unchanged IP logs and ignores."""
+    mock_config_entry.add_to_hass(hass)
+
+    # Use simple NamedTuple-like object for DHCP discovery info
+    dhcp_info = type(
+        "DhcpInfo",
+        (),
+        {
+            "ip": "192.168.1.100",  # Same as mock_config_entry host
+            "hostname": "marstek",
+            "macaddress": "aabbccddeeff",  # Same as mock_config_entry
+        },
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "dhcp"}, data=dhcp_info
+    )
+
+    # Should abort because IP hasn't changed
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_dhcp_no_existing_entry(hass: HomeAssistant) -> None:
+    """Test DHCP discovery with no existing entry redirects to user flow."""
+    # Don't add any config entry - test line 365-366
+
+    # Use simple NamedTuple-like object for DHCP discovery info
+    dhcp_info = type(
+        "DhcpInfo",
+        (),
+        {
+            "ip": "192.168.1.100",
+            "hostname": "marstek",
+            "macaddress": "aabbccddeeff",
+        },
+    )
+
+    # Mock discovery to prevent network socket calls
+    with _patch_discovery([]):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "dhcp"}, data=dhcp_info
+        )
+
+    # Should show user form (no existing entry to update)
+    assert result["type"] == FlowResultType.FORM
+
+
+async def test_integration_discovery_missing_ble_mac(hass: HomeAssistant) -> None:
+    """Test integration discovery aborts when ble_mac is missing."""
+    discovery_data = {
+        "ip": "192.168.1.100",
+        # Missing ble_mac
+        "device_type": "Venus",
+        "version": "3.0",
+    }
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "integration_discovery"}, data=discovery_data
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "invalid_discovery_info"
+
+
+async def test_user_flow_connection_error_redirects_to_manual(
+    hass: HomeAssistant,
+) -> None:
+    """Test user flow redirects to manual when ConnectionError occurs."""
+    with _patch_discovery([], error=ConnectionError("Network unreachable")):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+
+    # Should redirect to manual entry with cannot_connect error
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "manual"
+    assert result["errors"] == {"base": "cannot_connect"}

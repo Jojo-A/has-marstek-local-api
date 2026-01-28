@@ -619,3 +619,126 @@ class TestDeviceSupportsP:
         assert device_supports_pv(None) is False
         assert device_supports_pv("") is False
         assert device_supports_pv("Unknown") is False
+
+
+class TestLoggerLazyImport:
+    """Tests for lazy logger initialization."""
+
+    def test_logger_lazy_initialized(self):
+        """Test that _get_logger returns a logger."""
+        from custom_components.marstek.pymarstek.data_parser import _get_logger
+
+        logger = _get_logger()
+        assert logger is not None
+        assert logger.name == "custom_components.marstek.pymarstek.data_parser"
+
+    def test_logger_cached_after_first_call(self):
+        """Test that logger is cached and reused."""
+        from custom_components.marstek.pymarstek.data_parser import _get_logger
+
+        logger1 = _get_logger()
+        logger2 = _get_logger()
+        assert logger1 is logger2
+
+
+class TestScalePvPowerEdgeCases:
+    """Tests for _scale_pv_power helper in parse_pv_status_response."""
+
+    def test_pv_power_with_zero_value(self):
+        """Test that zero PV power reports state 0."""
+        response = {
+            "id": 1,
+            "result": {
+                "pv_power": 0,
+                "pv_voltage": 40.0,
+                "pv_current": 0,
+            },
+        }
+        
+        result = parse_pv_status_response(response)
+        
+        assert result["pv1_power"] == 0.0
+        assert result["pv1_state"] == 0
+
+    def test_pv_power_scaled_correctly(self):
+        """Test that PV power is scaled from deciwatts to watts."""
+        response = {
+            "id": 1,
+            "result": {
+                "pv_power": 1000,  # 1000 deciwatts = 100 watts
+                "pv_voltage": 40.0,
+                "pv_current": 2.5,
+            },
+        }
+        
+        result = parse_pv_status_response(response)
+        
+        assert result["pv1_power"] == 100.0  # 1000 / 10 = 100
+        assert result["pv1_state"] == 1
+
+
+class TestMergeStatusPreviousStatusHandling:
+    """Tests for previous status handling in merge_device_status."""
+
+    def test_pv_keys_preserved_from_previous_when_missing(self):
+        """Test that PV keys from previous status are preserved when not in current."""
+        previous = {
+            "pv1_power": 200,
+            "pv1_voltage": 35,
+            "pv1_current": 5.7,
+            "battery_soc": 60,
+        }
+        
+        result = merge_device_status(
+            es_mode_data={"device_mode": "auto"},
+            es_status_data={"battery_soc": 65},
+            pv_status_data=None,  # No PV data this time
+            previous_status=previous,
+        )
+        
+        # PV keys should be preserved from previous status
+        assert result["pv1_power"] == 200
+        assert result["pv1_voltage"] == 35
+        assert result["pv1_current"] == 5.7
+        # Fresh data should override
+        assert result["battery_soc"] == 65
+
+    def test_previous_pv_none_not_preserved(self):
+        """Test that None PV values from previous are not preserved."""
+        previous = {
+            "pv1_power": None,
+            "pv1_voltage": 35,
+        }
+        
+        result = merge_device_status(
+            es_mode_data={"device_mode": "auto"},
+            es_status_data=None,
+            pv_status_data=None,
+            previous_status=previous,
+        )
+        
+        # None values should not be preserved
+        assert "pv1_power" not in result
+        # Non-None values should be preserved
+        assert result["pv1_voltage"] == 35
+
+    def test_previous_none_values_preserved_in_status(self):
+        """Test that previous non-None values replace None in status dict."""
+        previous = {
+            "battery_soc": 75,
+            "battery_power": 500,
+            "wifi_rssi": -55,
+        }
+        
+        result = merge_device_status(
+            es_mode_data=None,  # No mode data - status[battery_soc] stays None
+            es_status_data=None,  # No status data
+            pv_status_data=None,
+            wifi_status_data=None,
+            previous_status=previous,
+        )
+        
+        # Previous values should fill in None values in status
+        assert result["battery_soc"] == 75
+        assert result["battery_power"] == 500
+        assert result["wifi_rssi"] == -55
