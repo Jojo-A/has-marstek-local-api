@@ -91,11 +91,6 @@ async def _get_or_create_shared_udp_client(hass: HomeAssistant) -> MarstekUDPCli
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Marstek component."""
-    # Initialize scanner (only once, regardless of number of config entries)
-    # Scanner will detect IP changes and update config entries via config flow
-    scanner = MarstekScanner.async_get(hass)
-    await scanner.async_setup()
-
     # Register services
     await async_setup_services(hass)
 
@@ -105,6 +100,11 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: MarstekConfigEntry) -> bool:
     """Set up Marstek from a config entry."""
     _LOGGER.info("Setting up Marstek config entry: %s", entry.title)
+
+    # Initialize scanner (only once, regardless of number of config entries)
+    # Scanner will detect IP changes and update config entries via config flow
+    scanner = MarstekScanner.async_get(hass)
+    await scanner.async_setup()
 
     # Use shared UDP client to avoid port conflicts between multiple devices
     udp_client = await _get_or_create_shared_udp_client(hass)
@@ -143,7 +143,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MarstekConfigEntry) -> b
         # Raise ConfigEntryNotReady to allow Home Assistant to retry after Scanner updates IP
         # Note: Don't cleanup shared UDP client - other entries may be using it
         error_type = type(ex).__name__
-        _LOGGER.warning(
+        _LOGGER.debug(
             "Unable to connect to device at %s (%s: %s). "
             "Scanner will detect IP changes automatically. "
             "Home Assistant will retry setup periodically.",
@@ -191,7 +191,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: MarstekConfigEntry) -> b
         failures = getattr(coordinator, "consecutive_failures", 0)
         last_attempt = getattr(coordinator, "last_update_attempt_time", None)
         
-        _LOGGER.warning(
+        _LOGGER.debug(
             "Initial data fetch failed for %s after %d attempt(s) (last attempt: %s): %s",
             stored_ip,
             failures,

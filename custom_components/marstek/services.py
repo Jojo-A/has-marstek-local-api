@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import time
 from typing import TYPE_CHECKING, Any
 
 import voluptuous as vol
@@ -290,6 +291,8 @@ async def async_set_manual_schedule(hass: HomeAssistant, call: ServiceCall) -> N
     start_time_str = start_time.strftime("%H:%M")
     end_time_str = end_time.strftime("%H:%M")
 
+    _validate_time_range(start_time, end_time)
+
     # Calculate week_set bitmask
     week_set = _calculate_week_set(days)
 
@@ -373,6 +376,28 @@ def _parse_time_string(time_str: str) -> str:
     raise ValueError(f"Invalid time format: {time_str}")
 
 
+def _time_to_minutes(value: time | str) -> int:
+    """Convert time or time string to minutes since midnight."""
+    if isinstance(value, time):
+        return value.hour * 60 + value.minute
+
+    parts = value.split(":")
+    if len(parts) >= 2:
+        return int(parts[0]) * 60 + int(parts[1])
+
+    raise ValueError(f"Invalid time format: {value}")
+
+
+def _validate_time_range(start: time | str, end: time | str) -> None:
+    """Validate that end time is after start time."""
+    if _time_to_minutes(end) <= _time_to_minutes(start):
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="invalid_time_range",
+            translation_placeholders={"start": str(start), "end": str(end)},
+        )
+
+
 async def async_set_manual_schedules(hass: HomeAssistant, call: ServiceCall) -> None:
     """Handle set_manual_schedules service call (batch configuration).
     
@@ -389,8 +414,12 @@ async def async_set_manual_schedules(hass: HomeAssistant, call: ServiceCall) -> 
     try:
         for schedule in schedules:
             schedule_slot = schedule[ATTR_SCHEDULE_SLOT]
-            start_time_str = _parse_time_string(schedule[ATTR_START_TIME])
-            end_time_str = _parse_time_string(schedule[ATTR_END_TIME])
+            start_time_raw = schedule[ATTR_START_TIME]
+            end_time_raw = schedule[ATTR_END_TIME]
+            _validate_time_range(start_time_raw, end_time_raw)
+
+            start_time_str = _parse_time_string(start_time_raw)
+            end_time_str = _parse_time_string(end_time_raw)
             power = schedule.get(ATTR_POWER, 0)
             days = schedule.get(ATTR_DAYS, ["mon", "tue", "wed", "thu", "fri", "sat", "sun"])
             enable = schedule.get(ATTR_ENABLE, True)

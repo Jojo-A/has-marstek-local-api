@@ -95,6 +95,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             name=f"Marstek {device_ip}",
             update_interval=timedelta(seconds=fast_interval),
             config_entry=config_entry,
+            always_update=False,
         )
         
         # Log configured intervals

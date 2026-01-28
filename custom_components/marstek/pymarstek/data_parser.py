@@ -67,7 +67,7 @@ def parse_es_status_response(response: dict[str, Any]) -> dict[str, Any]:
     pv_power = result.get("pv_power", 0)  # Solar power
     ongrid_power = result.get("ongrid_power", 0)  # Grid power
     offgrid_power = result.get("offgrid_power", 0)
-    bat_power = result.get("bat_power", 0)  # Battery power (+ = discharge, - = charge)
+    bat_power = result.get("bat_power", 0)  # Battery power (+ = charge, - = discharge)
     
     # Energy totals
     total_pv_energy = result.get("total_pv_energy", 0)

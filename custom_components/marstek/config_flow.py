@@ -87,8 +87,6 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             device_index = int(user_input["device"])
             device = self.discovered_devices[device_index]
 
-            # Check if device is already configured using host/mac
-            self._async_abort_entries_match({CONF_HOST: device["ip"]})
             # Use BLE-MAC as unique_id for stability (beardhatcode & mik-laj feedback)
             # BLE-MAC is more stable than WiFi MAC and ensures device history continuity
             unique_id_mac = (
@@ -101,7 +99,6 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors={"base": "invalid_discovery_info"},
                 )
 
-            self._async_abort_entries_match({CONF_MAC: unique_id_mac})
             await self.async_set_unique_id(format_mac(unique_id_mac))
             self._abort_if_unique_id_configured()
 
@@ -246,8 +243,6 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         errors={"base": "invalid_discovery_info"},
                     )
 
-                self._async_abort_entries_match({CONF_HOST: host})
-                self._async_abort_entries_match({CONF_MAC: unique_id_mac})
                 await self.async_set_unique_id(format_mac(unique_id_mac))
                 self._abort_if_unique_id_configured()
 
