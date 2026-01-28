@@ -2,6 +2,8 @@
 
 This custom integration lets Home Assistant monitor and control **Marstek energy storage devices** over the **local network** using the Marstek **Open API via UDP** (no cloud dependency).
 
+Verified against `dcc32efe` (2026-01-28).
+
 ## Highlights
 
 - Local UDP polling (single coordinator per device)

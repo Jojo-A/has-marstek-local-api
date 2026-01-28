@@ -20,8 +20,14 @@ pytest
 Run the mock device to develop without hardware:
 
 ```
-cd tools/mock_device
-python mock_marstek.py
+cd tools
+python -m mock_device
+```
+
+Backwards-compatible shim (still works):
+
+```
+python tools/mock_device/mock_marstek.py
 ```
 
 ## Protocol reference

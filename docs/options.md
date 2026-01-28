@@ -16,15 +16,19 @@ The integration uses tiered polling to reduce device load:
 
 Options also expose request timing knobs to avoid UDP bursts:
 
-- Request delay
-- Request timeout
-- Failures before unavailable
+- Request delay (range 1–30s)
+- Request timeout (range 5–60s)
+- Failures before unavailable (range 1–10)
 
 ![Network settings](screenshots/device-settings-network.png)
 
 ## Power / behavior
 
-Depending on device/firmware, additional power-related settings may be available.
+These settings affect automations and command validation:
+
+- Action charge power (W): default power for the **Charge** device action
+- Action discharge power (W): default power for the **Discharge** device action
+- Socket limit: toggles an internal power-limit model used to validate requested power (applies to services and actions)
 
 ![Power settings](screenshots/device-settings-power.png)
 
