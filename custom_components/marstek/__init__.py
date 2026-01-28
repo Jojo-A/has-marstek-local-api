@@ -262,16 +262,21 @@ async def async_unload_entry(hass: HomeAssistant, entry: MarstekConfigEntry) -> 
 
 async def async_remove_entry(hass: HomeAssistant, entry: MarstekConfigEntry) -> None:
     """Remove a config entry and clean up stale devices."""
+    from homeassistant.helpers.device_registry import format_mac
+
     # Clear any remaining repair issues
     _clear_connection_issue(hass, entry)
 
-    device_identifier = (
+    device_identifier_raw = (
         entry.data.get("ble_mac")
         or entry.data.get("mac")
         or entry.data.get("wifi_mac")
     )
-    if not device_identifier:
+    if not device_identifier_raw:
         return
+
+    # Use format_mac for consistency with build_device_info
+    device_identifier = format_mac(device_identifier_raw)
 
     device_registry = dr.async_get(hass)
     device = device_registry.async_get_device(
