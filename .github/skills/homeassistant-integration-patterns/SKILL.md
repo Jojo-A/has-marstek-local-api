@@ -19,14 +19,22 @@ This skill helps you make correct, repo-consistent changes to this Home Assistan
 
 | Task | File(s) |
 |---|---|
-| Setup / teardown / coordinator wiring | `custom_components/marstek/__init__.py` |
-| Config flow (user, dhcp, integration discovery) | `custom_components/marstek/config_flow.py` |
-| Central polling | `custom_components/marstek/coordinator.py` |
-| IP-change scanner | `custom_components/marstek/scanner.py` |
-| Entities (sensors) | `custom_components/marstek/sensor.py` |
-| Device automation actions | `custom_components/marstek/device_action.py` |
-| Text / translations | `custom_components/marstek/strings.json`, `custom_components/marstek/translations/en.json` |
-| Local API reference | `docs/MarstekDeviceOpenApi.pdf` |
+| Setup / teardown / coordinator wiring | `__init__.py` |
+| Config flow (user, dhcp, integration discovery) | `config_flow.py` |
+| Central polling (tiered intervals) | `coordinator.py` |
+| IP-change scanner | `scanner.py` |
+| Sensors | `sensor.py` (EntityDescription pattern) |
+| Binary sensors | `binary_sensor.py` (EntityDescription pattern) |
+| Select entities | `select.py` |
+| Services | `services.py` (idempotent registration) |
+| Device automation actions | `device_action.py` |
+| Device info helper | `device_info.py` |
+| Mode configuration | `mode_config.py` |
+| Diagnostics | `diagnostics.py` |
+| Text / translations | `strings.json`, `translations/en.json` |
+| Icons | `icons.json` |
+| Local API reference | `docs/marstek_device_openapi.MD` |
+| UDP client library | `pymarstek/` |
 
 ## Core Rules
 
@@ -70,10 +78,12 @@ async def _async_update_data(self):
 
 Steps:
 1. Find the value on `coordinator.data` (a plain `dict[str, Any]` coming from `pymarstek`).
-2. Add a new sensor entity in `custom_components/marstek/sensor.py`.
-3. Keep the `unique_id` stable (BLE-MAC based + sensor key).
-4. If user-facing, add translation in `custom_components/marstek/translations/en.json` (and keep `strings.json` in sync).
-5. Only register entities for data keys that exist to avoid permanent `unavailable` noise.
+2. Add a `MarstekSensorEntityDescription` to the `SENSORS` tuple in `sensor.py`.
+3. Use `exists_fn` to conditionally create entities (avoids permanent unavailable state).
+4. Keep the `unique_id` stable (BLE-MAC + sensor key).
+5. Add translation keys in `translations/en.json` (and keep `strings.json` in sync).
+6. Use `suggested_display_precision` for numeric sensors.
+7. Only register entities for data keys that exist to avoid permanent `unavailable` noise.
 
 ### Entity Patterns (Mandatory for New Integrations)
 

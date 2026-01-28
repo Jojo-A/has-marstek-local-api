@@ -22,9 +22,17 @@ This skill focuses on changes that must preserve the intent of this repository: 
 
 ## Polling Interval Policy
 
-- Device polling is set in `custom_components/marstek/coordinator.py` (`SCAN_INTERVAL`, currently 10 seconds).
-- The IP-change scanner runs separately in `custom_components/marstek/scanner.py` (`SCAN_INTERVAL`, currently 60 seconds).
-- Avoid shortening intervals without validating device/network stability.
+Polling is **tiered** to reduce device load (configurable via options flow):
+
+| Tier | Default | Commands |
+|------|---------|----------|
+| Fast | 30s | `ES.GetMode`, `ES.GetStatus`, `EM.GetStatus` (real-time power) |
+| Medium | 60s | `PV.GetStatus` (solar data, Venus A/D only) |
+| Slow | 300s | `Wifi.GetStatus`, `Bat.GetStatus` (diagnostics) |
+
+The IP-change scanner runs separately (`scanner.py`, 60s interval).
+
+Avoid shortening intervals without validating device/network stability. The device can be sensitive to request bursts.
 
 ## Config / Options / Reauth
 

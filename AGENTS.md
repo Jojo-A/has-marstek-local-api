@@ -6,8 +6,9 @@ This repository contains a Home Assistant custom integration for **Marstek energ
 
 - **Domain**: `marstek`
 - **Scope**: Marstek devices that support **OPEN API** on the local network.
-- **Transport**: UDP JSON-RPC-like messages (default port **30000**) as described in `docs/MarstekDeviceOpenApi.pdf`.
+- **Transport**: UDP JSON-RPC-like messages (default port **30000**) as described in `docs/marstek_device_openapi.MD`.
 - **Pattern**: `local_polling` using a single `DataUpdateCoordinator` per device + a background `Scanner` to detect IP changes.
+- **Quality Scale**: Bronze (tracked in `quality_scale.yaml`)
 
 Important compatibility notes:
 - The integration is currently **not compatible with Venus E2.0** devices (see `README.md`).
@@ -18,6 +19,7 @@ Important compatibility notes:
 - Do **not** add per-entity polling or extra network calls from entities.
 - All entities must read from `MarstekDataUpdateCoordinator.data`.
 - Avoid concurrent requests; Marstek devices can be sensitive to request bursts.
+- Coordinator uses **tiered polling** (fast/medium/slow intervals) to reduce device load.
 
 If you add/modify device control:
 - Pause coordinator polling while sending control commands (see `custom_components/marstek/device_action.py`) to avoid concurrent UDP traffic.
@@ -30,8 +32,11 @@ If you add/modify device control:
 - Config/UI-first: no new YAML setup; keep config/reauth/options in `config_flow.py` with selectors where it improves UX.
 - Unique IDs must stay stable (BLE-MAC-based) to prevent duplicate entities on IP changes.
 - Add user-facing text via `strings.json` → mirrored to `translations/en.json`; prefer descriptive error keys (e.g., `cannot_connect`).
-- Entity classes should set `_attr_has_entity_name = True` and expose `device_info` for proper device grouping.
+- Entity classes must set `_attr_has_entity_name = True` and expose `device_info` for proper device grouping.
+- Use `EntityDescription` dataclasses for declarative sensor/binary_sensor definitions.
 - Loading must be async and non-blocking; any sync library work belongs in executor jobs.
+- Use `entry.async_on_unload()` for cleanup callbacks.
+- Services must be registered idempotently (check `hass.services.has_service()` first).
 
 ### 4) Discovery and IP changes are handled by the scanner
 - Setup/connection uses the configured IP; it does **not** perform discovery during setup.
@@ -41,52 +46,115 @@ If you add/modify device control:
 ### 5) OPEN API semantics (UDP)
 - Devices must have OPEN API enabled in the Marstek app.
 - Default UDP port is 30000; the Open API spec recommends using a high port range.
-- LAN discovery uses UDP broadcast + `Marstek.GetDevice` (see `docs/MarstekDeviceOpenApi.pdf`).
+- LAN discovery uses UDP broadcast + `Marstek.GetDevice` (see `docs/marstek_device_openapi.MD`).
+- Shared UDP client is stored in `hass.data[DOMAIN][DATA_UDP_CLIENT]` and reused across entries.
 
 ## Code map (where to implement changes)
 
 | Concern | File | Notes |
 |---|---|---|
-| Setup / teardown | `custom_components/marstek/__init__.py` | Creates UDP client + coordinator; starts `MarstekScanner`; forwards platforms |
-| Config flow | `custom_components/marstek/config_flow.py` | Broadcast discovery UI, DHCP updates, and integration-discovery handling |
-| Polling + error handling | `custom_components/marstek/coordinator.py` | Single source of truth for status polling; returns previous data on connectivity issues |
-| IP change detection | `custom_components/marstek/scanner.py` | Periodic broadcast discovery; triggers discovery flow to update config entries |
-| Entities | `custom_components/marstek/sensor.py` | Coordinator-backed sensors; stable unique IDs based on BLE-MAC |
-| Device actions | `custom_components/marstek/device_action.py` | Implements device automation actions using `ES.SetMode` with retries + verification; pauses polling during control |
-| Text/translations | `custom_components/marstek/strings.json`, `custom_components/marstek/translations/en.json` | Keep translation keys stable |
-| Local API reference | `docs/MarstekDeviceOpenApi.pdf` | UDP protocol + method list (Marstek.GetDevice, ES.GetStatus, ES.GetMode, etc.) |
+| Setup / teardown | `__init__.py` | Creates shared UDP client + coordinator; starts `MarstekScanner`; forwards platforms; uses `entry.async_on_unload()` |
+| Config flow | `config_flow.py` | Broadcast discovery UI, DHCP updates, reauth, reconfigure, options flow with sections |
+| Polling + error handling | `coordinator.py` | Single source of truth; tiered polling (fast/medium/slow); returns previous data on connectivity issues |
+| IP change detection | `scanner.py` | Periodic broadcast discovery (60s); triggers discovery flow to update config entries |
+| Sensors | `sensor.py` | EntityDescription pattern; coordinator-backed; stable unique IDs; `suggested_display_precision` |
+| Binary sensors | `binary_sensor.py` | EntityDescription pattern; CT connection status |
+| Select entities | `select.py` | Operating mode selection (Auto/AI/Manual/Passive) |
+| Services | `services.py` | Idempotent registration; passive mode, manual schedules, data sync |
+| Device actions | `device_action.py` | Automation actions using `ES.SetMode` with retries + verification; pauses polling |
+| Device info helper | `device_info.py` | Shared `build_device_info()` + identifier utilities |
+| Diagnostics | `diagnostics.py` | Config entry diagnostics with redaction |
+| Mode configuration | `mode_config.py` | Mode parameter building helpers |
+| Text/translations | `strings.json`, `translations/en.json` | Keep in sync; use translation keys in entities |
+| Icons | `icons.json` | Icon translations per entity |
+| Local API reference | `docs/marstek_device_openapi.MD` | UDP protocol + method list |
+| UDP client library | `pymarstek/` | `MarstekUDPClient`, command builder, data parser |
+
+## Platforms & Entities
+
+| Platform | Entities |
+|----------|---------|
+| `sensor` | Battery SoC, power, status, temperature; device mode; PV power/voltage/current (4ch, Venus A/D); grid power (3-phase); WiFi diagnostics |
+| `binary_sensor` | CT connection status |
+| `select` | Operating mode (Auto/AI/Manual/Passive) |
 
 ## Adding or changing sensors
 
-Preferred pattern:
-1. Ensure the value is present on `MarstekDataUpdateCoordinator.data`.
-2. Add a coordinator-backed `SensorEntity` in `sensor.py`.
-3. Keep unique IDs stable (BLE-MAC based) so upgrades don’t duplicate entities.
-4. Add/adjust translation keys in `translations/en.json` and keep `strings.json` in sync.
+Use the **EntityDescription pattern**:
+
+```python
+@dataclass(kw_only=True)
+class MarstekSensorEntityDescription(SensorEntityDescription):
+    value_fn: Callable[[MarstekDataUpdateCoordinator, dict, ConfigEntry | None], StateType]
+    exists_fn: Callable[[dict[str, Any]], bool] = lambda data: True
+
+SENSORS: tuple[MarstekSensorEntityDescription, ...] = (
+    MarstekSensorEntityDescription(
+        key="battery_soc",
+        translation_key="battery_level",
+        device_class=SensorDeviceClass.BATTERY,
+        native_unit_of_measurement=PERCENTAGE,
+        value_fn=lambda coord, _info, _entry: coord.data.get("battery_soc"),
+    ),
+)
+```
+
+Steps:
+1. Ensure the value is present in `MarstekDataUpdateCoordinator.data`.
+2. Add a `MarstekSensorEntityDescription` to the `SENSORS` tuple in `sensor.py`.
+3. Use `exists_fn` to conditionally create entities (avoids permanent unavailable state).
+4. Keep unique IDs stable (BLE-MAC + key).
+5. Add translation keys in `translations/en.json` and keep `strings.json` in sync.
+6. Use `suggested_display_precision` for numeric sensors.
 
 ## Polling intervals
 
-- Device status polling is configured in `custom_components/marstek/coordinator.py` (currently `SCAN_INTERVAL = 10s`).
-- The IP-change scanner runs separately (`custom_components/marstek/scanner.py`, `SCAN_INTERVAL = 60s`).
+Polling is **tiered** to reduce device load:
+
+| Tier | Default | Data |
+|------|---------|------|
+| Fast | 30s | `ES.GetMode`, `ES.GetStatus`, `EM.GetStatus` (real-time power) |
+| Medium | 60s | `PV.GetStatus` (solar data, Venus A/D only) |
+| Slow | 300s | `Wifi.GetStatus`, `Bat.GetStatus` (diagnostics) |
+
+Configurable via options flow. The IP-change scanner runs separately (60s interval).
+
+## Services
+
+| Service | Description |
+|---------|-------------|
+| `marstek.set_passive_mode` | Set passive mode with power and duration |
+| `marstek.set_manual_schedule` | Configure single schedule slot |
+| `marstek.set_manual_schedules` | Configure multiple schedules via YAML |
+| `marstek.clear_manual_schedules` | Clear all schedule slots |
+| `marstek.request_data_sync` | Trigger immediate coordinator refresh |
+
+Services are registered **once globally** (idempotent).
 
 ## Quality and style expectations
 
 - Follow Home Assistant coordinator patterns.
+- Use EntityDescription dataclasses for declarative entity definitions.
 - Keep changes minimal and consistent with existing style.
 - Prefer clear user-facing error messages in config flows via `strings.json` / translations.
+- Use `suggested_display_precision` for sensor formatting.
 - Integration-grade hygiene: avoid per-entity I/O, keep one coordinator per device, debounce refreshes, and ensure options changes trigger reloads.
 - Testing/QA: prefer pytest + `pytest-homeassistant-custom-component`; keep manifest versions pinned and metadata valid for HACS/hassfest.
 
 ## Testing and QA expectations
 
 - Aim for Bronze+ quality scale: 100% config_flow coverage, connection tested in setup, unload/reload covered.
-- Test structure: `tests/` mirrors platforms (`test_config_flow.py`, `test_init.py`, `test_sensor.py`, etc.) with shared fixtures in `tests/conftest.py` (enable custom integrations).
-- Use `pytest-homeassistant-custom-component` with pinned versions in `requirements_test.txt`; mock UDP/HTTP I/O—no live devices.
+- Test structure: `tests/` mirrors platforms (`test_config_flow.py`, `test_init.py`, `test_sensor.py`, etc.) with shared fixtures in `tests/conftest.py`.
+- Use `pytest-homeassistant-custom-component` with pinned versions in `requirements_test.txt`; mock UDP I/O—no live devices.
 - Cover failures: cannot_connect, invalid_auth/invalid_discovery_info, already_configured, coordinator timeouts, action retries.
-- Mark coordinator failures with `UpdateFailed` to surface entity unavailability; snapshot diagnostics if added later.
+- Mark coordinator failures with `UpdateFailed` to surface entity unavailability.
 - CI: run hassfest + lint (ruff/mypy) + pytest (coverage threshold) on latest supported Python versions.
+- Mock device available in `tools/mock_device/` for local testing.
 
 ## Local development
 
 - Run Home Assistant dev instance and watch logs for the `marstek` logger.
+- Use `tools/mock_device/` to simulate devices without hardware.
+- Use `tools/query_device.py` to query real devices for debugging.
 - When troubleshooting discovery: ensure devices and HA are on the same LAN segment and UDP port is reachable.
+- Devcontainer supports multiple mock devices (see `.devcontainer/docker-compose.yml`).
