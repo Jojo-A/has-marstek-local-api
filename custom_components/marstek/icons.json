@@ -1,4 +1,21 @@
 {
+  "services": {
+    "set_passive_mode": {
+      "service": "mdi:battery-charging-wireless"
+    },
+    "set_manual_schedule": {
+      "service": "mdi:calendar-clock"
+    },
+    "set_manual_schedules": {
+      "service": "mdi:calendar-multiple"
+    },
+    "clear_manual_schedules": {
+      "service": "mdi:calendar-remove"
+    },
+    "request_data_sync": {
+      "service": "mdi:sync"
+    }
+  },
   "entity": {
     "sensor": {
       "battery_level": {

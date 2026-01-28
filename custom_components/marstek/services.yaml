@@ -1,7 +1,5 @@
 # Marstek service definitions
 set_passive_mode:
-  name: Set Passive Mode
-  description: Set the device to passive mode with specified power and duration. Negative power charges the battery, positive power discharges.
   fields:
     device_id:
       name: Battery
@@ -36,8 +34,6 @@ set_passive_mode:
           mode: box
 
 set_manual_schedule:
-  name: Set Manual Schedule
-  description: Configure a manual schedule slot for automatic charge/discharge operations.
   fields:
     device_id:
       name: Battery
@@ -119,8 +115,6 @@ set_manual_schedule:
         boolean:
 
 clear_manual_schedules:
-  name: Clear Manual Schedules
-  description: Clear all manual schedule slots on the device.
   fields:
     device_id:
       name: Battery
@@ -131,8 +125,6 @@ clear_manual_schedules:
           integration: marstek
 
 set_manual_schedules:
-  name: Set Multiple Manual Schedules
-  description: Configure multiple manual mode schedules using YAML for the selected battery.
   fields:
     device_id:
       name: Battery
@@ -160,8 +152,6 @@ set_manual_schedules:
         object:
 
 request_data_sync:
-  name: Request Data Sync
-  description: Trigger an immediate data refresh from the Marstek device.
   fields:
     device_id:
       name: Battery

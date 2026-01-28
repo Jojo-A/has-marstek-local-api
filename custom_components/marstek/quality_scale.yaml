@@ -32,7 +32,9 @@ rules:
   parallel-updates:
     status: done
     comment: Single coordinator per device; entities read from coordinator.data
-  reauthentication-flow: done
+  reauthentication-flow:
+    status: exempt
+    comment: Integration uses UDP with no authentication; reauth flow handles IP changes only
   test-coverage: done
 
   # Gold
