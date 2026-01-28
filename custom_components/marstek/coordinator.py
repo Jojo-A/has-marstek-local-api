@@ -160,6 +160,19 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         )
 
+    def _is_wifi_rssi_enabled(self) -> bool:
+        """Return True if the WiFi RSSI entity is enabled for this entry."""
+        if not self.config_entry:
+            return False
+        entity_registry = er.async_get(self.hass)
+        entries = er.async_entries_for_config_entry(
+            entity_registry, self.config_entry.entry_id
+        )
+        for entry in entries:
+            if entry.unique_id and entry.unique_id.endswith("_wifi_rssi"):
+                return entry.disabled_by is None
+        return False
+
     @property
     def device_ip(self) -> str:
         """Get current device IP from config entry (supports dynamic IP updates)."""
@@ -205,14 +218,16 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         
         # WiFi and battery details - slow interval
         include_slow = (current_time - self._last_slow_fetch) >= slow_interval
+        include_wifi = include_slow and self._is_wifi_rssi_enabled()
         
         # Get configured timeout
         request_timeout = self._get_request_timeout()
         
         _LOGGER.debug(
-            "Polling tiers for %s: fast=always, pv=%s, wifi/bat=%s",
+            "Polling tiers for %s: fast=always, pv=%s, wifi=%s, bat=%s",
             current_ip,
             include_pv,
+            include_wifi,
             include_slow,
         )
 
@@ -225,7 +240,7 @@ class MarstekDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 port=current_port,
                 timeout=request_timeout,
                 include_pv=include_pv,
-                include_wifi=include_slow,
+                include_wifi=include_wifi,
                 include_em=True,  # Always fetch - fast tier
                 include_bat=include_slow,
                 delay_between_requests=request_delay,
