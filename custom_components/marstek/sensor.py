@@ -381,7 +381,7 @@ def _pv_sensor_descriptions() -> tuple[MarstekSensorEntityDescription, ...]:
     for pv_channel in range(1, 5):
         # Define metrics with unit, device_class, and suggested_display_precision
         pv_metrics: list[tuple[str, str | None, SensorDeviceClass | None, int | None]] = [
-            ("power", UnitOfPower.WATT, SensorDeviceClass.POWER, 0),
+            ("power", UnitOfPower.WATT, SensorDeviceClass.POWER, 1),
             ("voltage", UnitOfElectricPotential.VOLT, SensorDeviceClass.VOLTAGE, 1),
             ("current", UnitOfElectricCurrent.AMPERE, SensorDeviceClass.CURRENT, 2),
             ("state", None, None, None),
