@@ -124,13 +124,15 @@ def parse_pv_status_response(response: dict[str, Any]) -> dict[str, Any]:
     
     pv_data: dict[str, Any] = {}
 
-    def _scale_pv_power(raw_value: Any) -> Any:
+    def _scale_pv_power(raw_value: Any, *, channel: int | None = None) -> Any:
         """Scale PV power to watts.
 
-        Devices report PV power in deciwatts. Divide by 10 to get watts.
+        Channel 1 reports PV power in deciwatts; other channels report watts.
         """
         if raw_value is None:
             return None
+        if channel not in (None, 1):
+            return raw_value
         try:
             return float(raw_value) / 10
         except (TypeError, ValueError):
@@ -140,7 +142,7 @@ def parse_pv_status_response(response: dict[str, Any]) -> dict[str, Any]:
     # Check for single-channel format (per API spec)
     if "pv_power" in result:
         # Single PV channel - map to pv1_* for consistency
-        pv_data["pv1_power"] = _scale_pv_power(result.get("pv_power", 0))
+        pv_data["pv1_power"] = _scale_pv_power(result.get("pv_power", 0), channel=1)
         pv_data["pv1_voltage"] = result.get("pv_voltage", 0)
         pv_data["pv1_current"] = result.get("pv_current", 0)
         pv_data["pv1_state"] = 1 if result.get("pv_power", 0) > 0 else 0
@@ -149,7 +151,8 @@ def parse_pv_status_response(response: dict[str, Any]) -> dict[str, Any]:
         for channel in range(1, 5):
             prefix = f"pv{channel}_"
             pv_data[f"{prefix}power"] = _scale_pv_power(
-                result.get(f"{prefix}power", 0)
+                result.get(f"{prefix}power", 0),
+                channel=channel,
             )
             pv_data[f"{prefix}voltage"] = result.get(f"{prefix}voltage", 0)
             pv_data[f"{prefix}current"] = result.get(f"{prefix}current", 0)

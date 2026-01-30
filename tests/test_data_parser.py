@@ -198,7 +198,7 @@ class TestParsePvStatusResponse:
         assert result["pv1_voltage"] == 35
         assert result["pv1_current"] == 8.5
         assert result["pv1_state"] == 1
-        assert result["pv2_power"] == 25.0
+        assert result["pv2_power"] == 250
 
     def test_parse_single_channel_format(self):
         """Test parsing single-channel PV response (pv_ without number)."""
