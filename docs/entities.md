@@ -10,7 +10,7 @@ All entities are **coordinator-backed** (no per-entity polling). Names below mat
 |---|---|---|---|---|
 | Battery level | `battery_soc` | % | — | Enabled |
 | Battery power | `battery_power` | W | — | Enabled |
-| Grid power | `ongrid_power` | W | — | Enabled (if supported) |
+| On-grid power | `ongrid_power` | W | — | Enabled (if supported) |
 | Off-grid power | `offgrid_power` | W | — | Enabled (if supported) |
 | PV power | `pv_power` | W | — | Enabled (if supported) |
 | Device mode | `device_mode` | — | — | Enabled |
