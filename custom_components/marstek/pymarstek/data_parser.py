@@ -142,7 +142,7 @@ def parse_pv_status_response(response: dict[str, Any]) -> dict[str, Any]:
     # Check for single-channel format (per API spec)
     if "pv_power" in result:
         # Single PV channel - map to pv1_* for consistency
-        pv_data["pv1_power"] = _scale_pv_power(result.get("pv_power", 0), channel=1)
+        pv_data["pv1_power"] = _scale_pv_power(result.get("pv_power", 0))
         pv_data["pv1_voltage"] = result.get("pv_voltage", 0)
         pv_data["pv1_current"] = result.get("pv_current", 0)
         pv_data["pv1_state"] = 1 if result.get("pv_power", 0) > 0 else 0
