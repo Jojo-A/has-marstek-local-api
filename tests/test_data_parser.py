@@ -698,7 +698,7 @@ class TestMergeDeviceStatusNoPV:
     def test_no_pv_keys_when_no_pv_data(self):
         """Test that PV keys are NOT included when no PV data is provided.
         
-        Per API docs (Chapter 4): Only Venus D supports PV, not Venus C/E.
+        Venus A and Venus D support PV; Venus C/E do NOT.
         When pv_status_data is None, no PV keys should be in the result.
         """
         result = merge_device_status(
@@ -717,7 +717,7 @@ class TestMergeDeviceStatusNoPV:
         assert "pv4_power" not in result
 
     def test_pv_keys_included_when_pv_data_provided(self):
-        """Test that PV keys ARE included when PV data is provided (Venus D)."""
+        """Test that PV keys ARE included when PV data is provided (Venus A/D)."""
         pv_data = {
             "pv1_power": 300,
             "pv1_voltage": 40,
@@ -728,7 +728,7 @@ class TestMergeDeviceStatusNoPV:
         result = merge_device_status(
             es_mode_data={"device_mode": "auto"},
             es_status_data=None,
-            pv_status_data=pv_data,  # Venus D with PV data
+            pv_status_data=pv_data,  # Venus A/D with PV data
             wifi_status_data=None,
             em_status_data=None,
             bat_status_data=None,
@@ -745,6 +745,16 @@ class TestMergeDeviceStatusNoPV:
 
 class TestDeviceSupportsP:
     """Tests for device_supports_pv function."""
+
+    def test_venus_a_supports_pv(self):
+        """Test Venus A variants are correctly identified as PV capable."""
+        from custom_components.marstek.const import device_supports_pv
+
+        assert device_supports_pv("VenusA") is True
+        assert device_supports_pv("Venus A") is True
+        assert device_supports_pv("venusa") is True
+        assert device_supports_pv("VenusA 3.0") is True
+        assert device_supports_pv("Venus A 3.0") is True
 
     def test_venus_d_supports_pv(self):
         """Test Venus D variants are correctly identified as PV capable."""
