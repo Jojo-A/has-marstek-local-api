@@ -221,19 +221,6 @@ async def test_diagnostics_includes_command_stats(
     mock_config_entry.runtime_data = mock_runtime_data
 
     udp_client = MagicMock()
-    udp_client.get_command_stats.return_value = {
-        "ES.GetStatus": {
-            "total_attempts": 4,
-            "total_success": 3,
-            "total_timeouts": 1,
-            "total_failures": 0,
-            "last_success": True,
-            "last_latency": 0.5,
-            "last_timeout": False,
-            "last_error": None,
-            "last_updated": 1738170000.0,
-        }
-    }
     udp_client.get_command_stats_for_ip.return_value = {
         "ES.GetStatus": {
             "total_attempts": 2,
@@ -253,17 +240,11 @@ async def test_diagnostics_includes_command_stats(
     result = await async_get_config_entry_diagnostics(hass, mock_config_entry)
 
     assert "command_stats" in result
-    assert "overall" in result["command_stats"]
-    assert "device" in result["command_stats"]
-    overall = result["command_stats"]["overall"]["ES.GetStatus"]
-    device = result["command_stats"]["device"]["ES.GetStatus"]
+    stats = result["command_stats"]["ES.GetStatus"]
 
-    assert overall["total_attempts"] == 4
-    assert overall["success_rate"] == 0.75
-    assert overall["timeout_rate"] == 0.25
-    assert device["total_attempts"] == 2
-    assert device["success_rate"] == 0.5
-    assert device["timeout_rate"] == 0.5
+    assert stats["total_attempts"] == 2
+    assert stats["success_rate"] == 0.5
+    assert stats["timeout_rate"] == 0.5
 
 
 async def test_diagnostics_without_last_update_time(

@@ -29,7 +29,6 @@ from .const import (
     DEFAULT_REQUEST_TIMEOUT,
     DOMAIN,
 )
-from .pymarstek.udp import MarstekUDPClient
 
 TO_REDACT = {
     CONF_HOST,
@@ -169,12 +168,11 @@ async def async_get_config_entry_diagnostics(
     # Only include device-specific stats for this entry's device
     udp_client = hass.data.get(DOMAIN, {}).get(DATA_UDP_CLIENT)
     device_command_stats: dict[str, dict[str, Any]] = {}
-    if isinstance(udp_client, MarstekUDPClient):
+    if udp_client is not None and hasattr(udp_client, "get_command_stats_for_ip"):
+        raw_stats = udp_client.get_command_stats_for_ip(coordinator.device_ip)
         device_command_stats = {
             method: _summarize_command_stats(stats)
-            for method, stats in udp_client.get_command_stats_for_ip(
-                coordinator.device_ip
-            ).items()
+            for method, stats in raw_stats.items()
         }
 
     return {
