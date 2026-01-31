@@ -343,9 +343,9 @@ def merge_device_status(
     if es_status_data:
         status.update(es_status_data)
     
-    # Recalculate battery power using PV channel data when ES.GetStatus returns
-    # incorrect pv_power (Venus A devices report pv_power=0 in ES.GetStatus but
-    # individual channels from PV.GetStatus are correct)
+    # Recalculate pv_power and battery_power using PV channel data when
+    # ES.GetStatus returns incorrect pv_power (Venus A devices report pv_power=0
+    # in ES.GetStatus but individual channels from PV.GetStatus are correct)
     if pv_status_data and es_status_data:
         es_pv_power = es_status_data.get("pv_power", 0)
         # Calculate total from individual PV channels
@@ -353,10 +353,14 @@ def merge_device_status(
             pv_status_data.get(f"pv{ch}_power", 0) or 0
             for ch in range(1, 5)
         )
-        # If ES.GetStatus pv_power is 0 but channels have real power, recalculate
+        # If ES.GetStatus pv_power is 0 but channels have real power, override
         if es_pv_power == 0 and total_pv_from_channels > 0:
+            # Override pv_power with calculated total from PV channels
+            status["pv_power"] = total_pv_from_channels
+            
+            # Recalculate battery power using correct pv_power
             ongrid_power = es_status_data.get("ongrid_power", 0) or 0
-            # Recalculate: bat_power = pv_power - ongrid_power (API convention)
+            # bat_power = pv_power - ongrid_power (API convention)
             # Then negate for HA convention (positive = discharging)
             raw_bat_power = total_pv_from_channels - ongrid_power
             battery_power = -raw_bat_power

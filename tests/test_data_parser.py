@@ -432,11 +432,12 @@ class TestMergeDeviceStatus:
         assert result["ct_connected"] is False
 
     def test_battery_power_recalculated_from_pv_channels(self):
-        """Test battery power is recalculated when ES.GetStatus pv_power is 0.
+        """Test battery power and pv_power are recalculated when ES.GetStatus pv_power is 0.
         
         Venus A devices report pv_power=0 in ES.GetStatus but individual 
         channels from PV.GetStatus have correct values. The merge function
-        should recalculate battery power using PV channels.
+        should override pv_power with the calculated sum and recalculate 
+        battery power using PV channels.
         
         Example from issue #3/#5:
         - pv1=41.5W, pv2=52W, pv3=58W, pv4=33W (total 184.5W)
@@ -465,12 +466,14 @@ class TestMergeDeviceStatus:
         )
         
         # Total PV: 41.5 + 52 + 58 + 33 = 184.5W
+        # pv_power should be overridden with calculated sum
+        assert result["pv_power"] == 184.5
         # Battery: -(184.5 - 169) = -15.5W (HA: negative = charging)
         assert result["battery_power"] == -15.5
         assert result["battery_status"] == "charging"
 
     def test_battery_power_not_recalculated_when_pv_power_correct(self):
-        """Test battery power is NOT recalculated when ES.GetStatus pv_power is non-zero."""
+        """Test battery/pv_power are NOT recalculated when ES.GetStatus pv_power is non-zero."""
         pv_status_data = {
             "pv1_power": 100.0,
             "pv2_power": 84.5,
@@ -488,7 +491,8 @@ class TestMergeDeviceStatus:
             pv_status_data=pv_status_data,
         )
         
-        # Should use the original ES.GetStatus value (not recalculated)
+        # Should use the original ES.GetStatus values (not recalculated)
+        assert result["pv_power"] == 184.5
         assert result["battery_power"] == -84.5
         assert result["battery_status"] == "charging"
 

@@ -80,27 +80,34 @@ async def test_no_pv_entities_when_data_missing(
         # Check that PV entities are not registered
         pv_entity = hass.states.get("sensor.marstek_venus_v3_pv1_power")
         assert pv_entity is None
-        # Total PV power should also not be created
-        total_pv = hass.states.get("sensor.marstek_venus_v3_total_pv_power")
-        assert total_pv is None
+        # PV power should also not be created as exist_fn checks for pv_power key
+        pv_power = hass.states.get("sensor.marstek_venus_v3_pv_power")
+        assert pv_power is None
 
 
-async def test_total_pv_power_calculated(
+async def test_pv_power_overridden_when_api_returns_zero(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test total PV power is calculated by summing all PV channel powers."""
+    """Test pv_power is overridden with calculated sum when API returns 0.
+    
+    Venus A devices report pv_power=0 in ES.GetStatus but individual 
+    channels from PV.GetStatus have correct values. The integration should
+    override pv_power with the calculated sum from channels.
+    """
     mock_config_entry.add_to_hass(hass)
 
+    # This status simulates what comes from merge_device_status when
+    # ES.GetStatus pv_power=0 is overridden with calculated sum
     status = {
         "device_mode": "auto",
         "battery_soc": 55,
-        "battery_power": 120,
+        "battery_power": -15.5,  # Recalculated: charging
         "pv1_power": 41.5,  # After scaling: 41.5W
         "pv2_power": 52.0,  # 52W
         "pv3_power": 58.0,  # 58W
         "pv4_power": 33.0,  # 33W
-        # Note: ES.GetStatus pv_power often returns 0 incorrectly
-        "pv_power": 0,
+        # pv_power is overridden in merge_device_status when API returns 0
+        "pv_power": 184.5,  # 41.5 + 52 + 58 + 33 = 184.5
     }
 
     client = create_mock_client(status=status)
@@ -109,16 +116,16 @@ async def test_total_pv_power_calculated(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-        # Total PV power should be sum: 41.5 + 52 + 58 + 33 = 184.5
-        state = hass.states.get("sensor.marstek_venus_v3_total_pv_power")
+        # PV power should show the overridden value (sum of channels)
+        state = hass.states.get("sensor.marstek_venus_v3_pv_power")
         assert state is not None
         assert float(state.state) == 184.5
 
 
-async def test_total_pv_power_partial_channels(
+async def test_pv_power_partial_channels(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
-    """Test total PV power with only some channels reporting."""
+    """Test pv_power with only some channels reporting."""
     mock_config_entry.add_to_hass(hass)
 
     status = {
@@ -128,6 +135,8 @@ async def test_total_pv_power_partial_channels(
         "pv1_power": 100.0,
         "pv2_power": 50.0,
         # pv3 and pv4 not present
+        # pv_power is calculated from available channels
+        "pv_power": 150.0,  # 100 + 50
     }
 
     client = create_mock_client(status=status)
@@ -136,8 +145,8 @@ async def test_total_pv_power_partial_channels(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-        # Total should be sum of available channels: 100 + 50 = 150
-        state = hass.states.get("sensor.marstek_venus_v3_total_pv_power")
+        # PV power should show sum of available channels
+        state = hass.states.get("sensor.marstek_venus_v3_pv_power")
         assert state is not None
         assert float(state.state) == 150.0
 
@@ -459,11 +468,10 @@ async def test_all_new_sensors_with_full_status(
         )
         assert hass.states.get("sensor.marstek_venus_v3_on_grid_power") is not None
         assert hass.states.get("sensor.marstek_venus_v3_off_grid_power") is not None
-        assert hass.states.get("sensor.marstek_venus_v3_pv_power") is not None
-        # Total PV power (calculated from individual channels)
-        total_pv = hass.states.get("sensor.marstek_venus_v3_total_pv_power")
-        assert total_pv is not None
-        assert float(total_pv.state) == 320.0  # 100 + 120 + 50 + 50
+        # PV power (overridden from calculated sum when API returns 0)
+        pv_power = hass.states.get("sensor.marstek_venus_v3_pv_power")
+        assert pv_power is not None
+        assert float(pv_power.state) == 320.0  # 100 + 120 + 50 + 50
         assert (
             entity_registry.async_get(
                 "sensor.marstek_venus_v3_battery_remaining_capacity"
