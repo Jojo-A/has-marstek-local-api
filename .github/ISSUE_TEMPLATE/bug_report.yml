@@ -1,0 +1,116 @@
+name: Bug report
+description: Report a problem with the Marstek integration
+title: "Bug: "
+assignees:
+  - taurgis
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out all required fields so we can reproduce the issue.
+
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      description: Copy from Settings > About.
+      placeholder: "e.g., 2026.1.5"
+    validations:
+      required: true
+
+  - type: input
+    id: component_version
+    attributes:
+      label: Marstek integration version
+      description: The version of this custom component (HACS or manual install).
+      placeholder: "e.g., 1.4.2"
+    validations:
+      required: true
+
+  - type: input
+    id: device_model
+    attributes:
+      label: Marstek device model
+      description: The exact device name/model (e.g., Venus A/D/E 3.0).
+      placeholder: "e.g., Venus E 3.0"
+    validations:
+      required: true
+
+  - type: input
+    id: firmware_version
+    attributes:
+      label: Marstek firmware version
+      description: The device firmware version shown in the Marstek app or device info.
+      placeholder: "e.g., 144"
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem summary
+      description: What is happening?
+      placeholder: "Short summary of the problem"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide clear, numbered steps so we can reproduce the issue.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: "What you expected to happen"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: "What actually happened"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Frequency
+      options:
+        - Every time
+        - Often
+        - Sometimes
+        - Rarely
+        - Only once
+    validations:
+      required: true
+
+  - type: textarea
+    id: debug_logs
+    attributes:
+      label: Debug logs
+      description: |
+        Enable debug logging and paste the relevant log lines here.
+      render: text
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have enabled debug logging and captured logs from a reproduction.
+          required: true
+        - label: I have searched for existing issues that describe this problem.
+          required: true
