@@ -13,6 +13,10 @@ This repository contains a Home Assistant custom integration for **Marstek energ
 Important compatibility notes:
 - The integration is currently **not compatible with Venus E2.0** devices (see `README.md`).
 
+## Research before implementation
+
+For any question or request, always run the `runSubagent` Official Docs Researcher (as defined in `.github/agents/official-docs-researcher.agent.md`) to do online research before starting the implementation. Summarize the findings using official sources only, include a direct link for every key claim, and keep those links or citations in the task notes. If the vendor, version, or goal is ambiguous, ask clarifying questions before proceeding.
+
 ## Architectural constraints you must respect
 
 ### 1) Keep polling centralized
