@@ -2,7 +2,7 @@
 name: 'Official Docs Researcher'
 description: 'Researches official documentation online and returns detailed, source-cited findings'
 model: 'Claude Sonnet 4.5'
-tools: ['vscode/openSimpleBrowser', 'vscode/askQuestions', 'search', 'web']
+tools: ['vscode/openSimpleBrowser', 'vscode/askQuestions', 'execute', 'read', 'agent', 'edit', 'search', 'web', 'atlassian/search']
 argument-hint: 'What topic should I research in official docs?'
 ---
 
