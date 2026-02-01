@@ -20,6 +20,7 @@ from custom_components.marstek.device_action import (
     ACTION_STOP,
     async_call_action_from_config,
     async_get_actions,
+    async_validate_action_config,
 )
 
 DEVICE_IDENTIFIER = format_mac("AA:BB:CC:DD:EE:FF")
@@ -486,6 +487,68 @@ async def test_device_action_retry_on_send_failure(hass, mock_config_entry):
         await async_call_action_from_config(hass, config, {}, None)
         # Should have made multiple calls (send failed, retried, verified)
         assert send_call_count >= 2
+
+
+async def test_validate_action_config_power_out_of_range(
+    hass, mock_config_entry
+):
+    """Test action config validation enforces device limits."""
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        data={
+            **mock_config_entry.data,
+            "device_type": "Venus E",
+        },
+    )
+
+    client = _mock_client()
+    with _patch_all(client=client):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        device_registry = dr.async_get(hass)
+        device = device_registry.async_get_device(identifiers={(DOMAIN, DEVICE_IDENTIFIER)})
+        assert device
+
+        config = {
+            CONF_DEVICE_ID: device.id,
+            CONF_DOMAIN: DOMAIN,
+            CONF_TYPE: ACTION_DISCHARGE,
+            "power": 2500,
+        }
+
+        from homeassistant.components.device_automation import InvalidDeviceAutomationConfig
+        with pytest.raises(InvalidDeviceAutomationConfig, match="Requested power"):
+            await async_validate_action_config(hass, config)
+
+
+async def test_validate_action_config_stop_allows_unloaded_entry(
+    hass, mock_config_entry
+):
+    """Test action config validation works for unloaded entries."""
+    mock_config_entry.add_to_hass(hass)
+
+    client = _mock_client()
+    with _patch_all(client=client):
+        await hass.config_entries.async_setup(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        device_registry = dr.async_get(hass)
+        device = device_registry.async_get_device(identifiers={(DOMAIN, DEVICE_IDENTIFIER)})
+        assert device
+
+        await hass.config_entries.async_unload(mock_config_entry.entry_id)
+        await hass.async_block_till_done()
+
+        config = {
+            CONF_DEVICE_ID: device.id,
+            CONF_DOMAIN: DOMAIN,
+            CONF_TYPE: ACTION_STOP,
+        }
+
+        validated = await async_validate_action_config(hass, config)
+        assert validated == config
 
 
 async def test_device_action_retry_exhausted(hass, mock_config_entry):

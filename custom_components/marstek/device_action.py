@@ -85,6 +85,52 @@ ACTION_SCHEMA = cv.DEVICE_ACTION_BASE_SCHEMA.extend(
 )
 
 
+def _resolve_action_settings(
+    action_type: str,
+    action_power: int | None,
+    entry: Any,
+) -> tuple[int, int]:
+    """Resolve power and enable values for the action."""
+    if action_type == ACTION_CHARGE:
+        default_power = entry.options.get(
+            CONF_ACTION_CHARGE_POWER, DEFAULT_ACTION_CHARGE_POWER
+        )
+        power_value = action_power if action_power is not None else abs(default_power)
+        return -int(power_value), 1
+
+    if action_type == ACTION_DISCHARGE:
+        default_power = entry.options.get(
+            CONF_ACTION_DISCHARGE_POWER, DEFAULT_ACTION_DISCHARGE_POWER
+        )
+        power_value = action_power if action_power is not None else default_power
+        return int(power_value), 1
+
+    return STOP_POWER, 0
+
+
+async def async_validate_action_config(
+    hass: HomeAssistant, config: ConfigType
+) -> ConfigType:
+    """Validate config for device actions."""
+    device_id: str = config[CONF_DEVICE_ID]
+    action_type: str = config[CONF_TYPE]
+
+    entry = _get_entry_from_device_id(hass, device_id, require_loaded=False)
+    if not entry:
+        raise InvalidDeviceAutomationConfig(
+            translation_domain=DOMAIN,
+            translation_key="no_config_entry",
+            translation_placeholders={"device_id": device_id},
+        )
+
+    action_power = config.get(ATTR_POWER)
+    power, enable = _resolve_action_settings(action_type, action_power, entry)
+    if enable:
+        _validate_action_power(entry, abs(power))
+
+    return config
+
+
 async def async_get_actions(
     hass: HomeAssistant, device_id: str
 ) -> list[dict[str, str]]:
@@ -135,26 +181,7 @@ async def async_call_action_from_config(
 
     # Get power from action config or fall back to options
     action_power = config.get(ATTR_POWER)
-    
-    if action_type == ACTION_CHARGE:
-        default_power = entry.options.get(
-            CONF_ACTION_CHARGE_POWER, DEFAULT_ACTION_CHARGE_POWER
-        )
-        # Use action power if provided, otherwise use default (both are positive in config)
-        power_value = action_power if action_power is not None else abs(default_power)
-        # Charge uses negative power internally
-        power = -int(power_value)
-        enable = 1
-    elif action_type == ACTION_DISCHARGE:
-        default_power = entry.options.get(
-            CONF_ACTION_DISCHARGE_POWER, DEFAULT_ACTION_DISCHARGE_POWER
-        )
-        # Use action power if provided, otherwise use default
-        power = int(action_power if action_power is not None else default_power)
-        enable = 1
-    else:  # ACTION_STOP
-        power = STOP_POWER
-        enable = 0
+    power, enable = _resolve_action_settings(action_type, action_power, entry)
 
     # Validate power against device limits (including socket limit)
     if enable:
@@ -431,7 +458,9 @@ async def _get_host_from_device(
     return None
 
 
-def _get_entry_from_device_id(hass: HomeAssistant, device_id: str) -> Any | None:
+def _get_entry_from_device_id(
+    hass: HomeAssistant, device_id: str, *, require_loaded: bool = True
+) -> Any | None:
     """Get config entry for a device ID."""
     device_registry = dr.async_get(hass)
     device = device_registry.async_get(device_id)
@@ -440,7 +469,10 @@ def _get_entry_from_device_id(hass: HomeAssistant, device_id: str) -> Any | None
 
     for config_entry_id in device.config_entries:
         entry = hass.config_entries.async_get_entry(config_entry_id)
-        if entry and entry.domain == DOMAIN and entry.state is ConfigEntryState.LOADED:
-            return entry
+        if not entry or entry.domain != DOMAIN:
+            continue
+        if require_loaded and entry.state is not ConfigEntryState.LOADED:
+            continue
+        return entry
 
     return None
