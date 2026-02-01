@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0-rc3] - 2026-02-01
+
+### Added
+- Mock device state persistence
+- Command diagnostics for UDP client
+- GitHub issue templates for bugs and feature requests
+
+### Changed
+- Enhanced PV and battery power reporting (including Venus A PV support)
+- Refined grid/on-grid sensor naming for clarity
+- Expanded error messaging with new translation keys
+- Simplified diagnostics command stats
+
+### Fixed
+- Aligned battery power behavior to Home Assistant Energy dashboard expectations
+- Corrected PV power scaling and inaccurate pv_power reporting
+
+### Maintenance
+- Improved test helpers and coverage enforcement
+- Documentation updates (Venus A/D PV support, comparisons, dev/testing guidance)
+- Cleanup: unused imports and logger definition; repository layout tweaks
+
 ## [1.0.0-rc2] - 2026-01-29
 
 ### Added
