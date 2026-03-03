@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0-rc7] - 2026-03-03
+
+### Added
+- Parallel API request option for faster polling
+- Marstek PV sensor data preparation
+- Automated issue labeling workflow
+- Slow response troubleshooting guidance
+- Agent workflow documentation
+
+### Fixed
+- Corrected idle battery power behavior when the device omits status
+
+### Maintenance
+- Ensured service setup on initialization
+- Expanded tests for config entry reload, service persistence, and reauth/discovery reload
+
 ## [1.0.0-rc6] - 2026-02-09
 
 ### Added
