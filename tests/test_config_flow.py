@@ -85,6 +85,40 @@ async def test_user_flow_success(hass: HomeAssistant) -> None:
     assert format_mac(result["data"]["ble_mac"]) == "aa:bb:cc:dd:ee:ff"
 
 
+async def test_user_flow_can_switch_to_manual_with_discovered_devices(
+    hass: HomeAssistant,
+) -> None:
+    """Test user flow offers manual entry path even when devices are discovered."""
+    devices = [
+        {
+            "ip": "1.2.3.4",
+            "ble_mac": "AA:BB:CC:DD:EE:FF",
+            "mac": "AA:BB:CC:DD:EE:FF",
+            "device_type": "Venus",
+            "version": 3,
+            "wifi_name": "marstek",
+            "wifi_mac": "11:22:33:44:55:66",
+            "model": "Venus",
+            "firmware": "3.0",
+        }
+    ]
+
+    with patch_discovery(devices):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": "user"}
+        )
+        assert result["type"] == FlowResultType.FORM
+        assert result["step_id"] == "user"
+
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={"device": "__manual__"},
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "manual"
+
+
 async def test_user_flow_discovery_probes_multiple_ports(hass: HomeAssistant) -> None:
     """Test initial user discovery probes default and common custom ports."""
     with patch(

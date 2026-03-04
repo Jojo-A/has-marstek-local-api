@@ -77,6 +77,7 @@ from .helpers.flow_schemas import (
 _LOGGER = logging.getLogger(__name__)
 
 _COMMON_CUSTOM_PORTS: tuple[int, ...] = (30001, 30002, 30003)
+_MANUAL_DEVICE_OPTION = "__manual__"
 
 class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Marstek."""
@@ -91,8 +92,12 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> config_entries.ConfigFlowResult:
         """Handle the initial step - broadcast device discovery."""
         if user_input is not None and "device" in user_input:
+            selected_device = str(user_input["device"])
+            if selected_device == _MANUAL_DEVICE_OPTION:
+                return await self.async_step_manual()
+
             # User has selected a device from the discovered list
-            device_index = int(user_input["device"])
+            device_index = int(selected_device)
             device = self.discovered_devices[device_index]
 
             # Use BLE-MAC as unique_id for stability (beardhatcode & mik-laj feedback)
@@ -147,6 +152,8 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_manual(
                     errors={"base": "all_devices_configured"}
                 )
+
+            device_options[_MANUAL_DEVICE_OPTION] = "Enter IP/port manually"
 
             # Build description showing already configured devices only
             # Note: The "Already configured devices:" header is embedded in the placeholder

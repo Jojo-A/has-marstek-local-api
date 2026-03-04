@@ -65,6 +65,7 @@
     'fields': dict({
       'device': dict({
         '0': 'Venus v3 (marstek) - 1.2.3.4',
+        '__manual__': 'Enter IP/port manually',
       }),
     }),
     'step_id': 'user',
