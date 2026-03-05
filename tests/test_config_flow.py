@@ -132,7 +132,7 @@ async def test_user_flow_discovery_probes_multiple_ports(hass: HomeAssistant) ->
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "manual"
     assert mock_discover.call_args is not None
-    assert mock_discover.call_args.kwargs["ports"] == [30000, 30001, 30002, 30003]
+    assert mock_discover.call_args.kwargs["ports"] == [30000, 30001, 30002, 30003, 30030]
 
 
 async def test_user_flow_uses_discovered_custom_port(hass: HomeAssistant) -> None:
@@ -391,6 +391,37 @@ async def test_dhcp_updates_ip(
     assert hass.config_entries.async_entries(DOMAIN)[0].data["host"] == "1.2.3.5"
 
 
+async def test_dhcp_does_not_reset_custom_port(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test DHCP discovery updates IP but keeps an existing custom port."""
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        data={**mock_config_entry.data, "port": 30030},
+    )
+
+    discovery_info = type(
+        "DhcpInfo",
+        (),
+        {
+            "ip": "1.2.3.5",
+            "hostname": "marstek",
+            "macaddress": "aabbccddeeff",
+        },
+    )
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "dhcp"}, data=discovery_info
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    updated_entry = hass.config_entries.async_entries(DOMAIN)[0]
+    assert updated_entry.data["host"] == "1.2.3.5"
+    assert updated_entry.data["port"] == 30030
+
+
 async def test_integration_discovery_updates_ip(
     hass: HomeAssistant, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -412,6 +443,36 @@ async def test_integration_discovery_updates_ip(
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "already_configured"
     assert hass.config_entries.async_entries(DOMAIN)[0].data["host"] == "1.2.3.99"
+
+
+async def test_integration_discovery_without_port_keeps_current_port(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """Test integration discovery without port does not overwrite custom port."""
+    mock_config_entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(
+        mock_config_entry,
+        data={**mock_config_entry.data, "port": 30030},
+    )
+
+    discovery_info = {
+        "ip": "1.2.3.99",
+        "ble_mac": "AA:BB:CC:DD:EE:FF",
+        "mac": "AA:BB:CC:DD:EE:FF",
+        "device_type": "Venus",
+        "version": 3,
+        # No port key in payload
+    }
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "integration_discovery"}, data=discovery_info
+    )
+
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    updated_entry = hass.config_entries.async_entries(DOMAIN)[0]
+    assert updated_entry.data["host"] == "1.2.3.99"
+    assert updated_entry.data["port"] == 30030
 
 
 async def test_integration_discovery_updates_port_same_ip(

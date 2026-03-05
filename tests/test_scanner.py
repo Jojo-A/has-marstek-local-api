@@ -16,7 +16,7 @@ from homeassistant.helpers.device_registry import format_mac
 
 from custom_components.marstek import MarstekRuntimeData
 from custom_components.marstek.const import DOMAIN
-from custom_components.marstek.scanner import MarstekScanner
+from custom_components.marstek.scanner import MarstekScanner, _build_discovery_flow_data
 
 
 @pytest.fixture(autouse=True)
@@ -41,6 +41,32 @@ async def test_scanner_init(hass: HomeAssistant):
 
     assert scanner._hass is hass
     assert scanner._track_interval is None
+
+
+def test_build_discovery_flow_data_includes_valid_port() -> None:
+    """Test discovery flow data includes a valid discovered port."""
+    flow_data = _build_discovery_flow_data(
+        {
+            "ip": "1.2.3.4",
+            "ble_mac": "AA:BB:CC:DD:EE:FF",
+            "port": 30030,
+        }
+    )
+
+    assert flow_data["port"] == 30030
+
+
+def test_build_discovery_flow_data_omits_invalid_port() -> None:
+    """Test discovery flow data omits invalid port values."""
+    flow_data = _build_discovery_flow_data(
+        {
+            "ip": "1.2.3.4",
+            "ble_mac": "AA:BB:CC:DD:EE:FF",
+            "port": "invalid",
+        }
+    )
+
+    assert "port" not in flow_data
 
 
 async def test_scanner_async_setup(hass: HomeAssistant):
@@ -115,6 +141,13 @@ async def test_scanner_async_request_scan_triggers(hass: HomeAssistant) -> None:
     with patch.object(scanner, "async_scan") as mock_scan:
         assert scanner.async_request_scan() is True
         mock_scan.assert_called_once()
+
+
+async def test_scanner_build_scan_ports_includes_30030(hass: HomeAssistant) -> None:
+    """Test scanner probes port 30030 by default for custom-port devices."""
+    scanner = MarstekScanner(hass)
+
+    assert 30030 in scanner._build_scan_ports()
 
 
 async def test_scanner_scan_impl_no_devices(hass: HomeAssistant):

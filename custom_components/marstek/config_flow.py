@@ -76,7 +76,7 @@ from .helpers.flow_schemas import (
 
 _LOGGER = logging.getLogger(__name__)
 
-_COMMON_CUSTOM_PORTS: tuple[int, ...] = (30001, 30002, 30003)
+_COMMON_CUSTOM_PORTS: tuple[int, ...] = (30001, 30002, 30003, 30030)
 _MANUAL_DEVICE_OPTION = "__manual__"
 
 class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -310,7 +310,7 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         await self.async_set_unique_id(mac)
         self._discovered_ip = discovery_info.ip
-        self._discovered_port = DEFAULT_UDP_PORT
+        self._discovered_port = None
 
         # Use shared discovery handler to update existing entries or confirm new ones
         return await self._async_handle_discovery_with_unique_id()
@@ -328,7 +328,13 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Set unique_id using BLE-MAC
         await self.async_set_unique_id(format_mac(discovered_ble_mac))
         self._discovered_ip = discovered_ip
-        self._discovered_port = int(discovery_info.get("port", DEFAULT_UDP_PORT))
+        discovered_port = discovery_info.get("port")
+        try:
+            self._discovered_port = (
+                int(discovered_port) if discovered_port is not None else None
+            )
+        except (TypeError, ValueError):
+            self._discovered_port = None
 
         # Handle discovery with unique_id (updates existing entries or creates new)
         return await self._async_handle_discovery_with_unique_id()
@@ -496,7 +502,7 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 continue
 
             reload = entry.state == ConfigEntryState.SETUP_RETRY
-            discovered_port = self._discovered_port or DEFAULT_UDP_PORT
+            discovered_port = self._discovered_port
             current_port = int(entry.data.get(CONF_PORT, DEFAULT_UDP_PORT))
             updates: dict[str, Any] = {}
 
@@ -509,7 +515,7 @@ class MarstekConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 updates[CONF_HOST] = self._discovered_ip
 
-            if current_port != discovered_port:
+            if discovered_port is not None and current_port != discovered_port:
                 _LOGGER.info(
                     "Discovery: Device %s port changed from %s to %s, updating config entry",
                     entry.unique_id,

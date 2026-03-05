@@ -42,20 +42,13 @@ _DEVICE_METADATA_FIELDS: tuple[str, ...] = (
     "firmware",
 )
 
-_COMMON_CUSTOM_PORTS: tuple[int, ...] = (30001, 30002, 30003)
+_COMMON_CUSTOM_PORTS: tuple[int, ...] = (30001, 30002, 30003, 30030)
 
 
 def _build_discovery_flow_data(device: dict[str, Any]) -> dict[str, Any]:
     """Build discovery flow data from device info."""
-    port = device.get("port", DEFAULT_UDP_PORT)
-    try:
-        normalized_port = int(port)
-    except (TypeError, ValueError):
-        normalized_port = DEFAULT_UDP_PORT
-
-    return {
+    flow_data: dict[str, Any] = {
         "ip": device.get("ip"),
-        "port": normalized_port,
         "ble_mac": device.get("ble_mac"),
         "device_type": device.get("device_type"),
         "version": device.get("version"),
@@ -63,6 +56,17 @@ def _build_discovery_flow_data(device: dict[str, Any]) -> dict[str, Any]:
         "wifi_mac": device.get("wifi_mac"),
         "mac": device.get("mac"),
     }
+
+    discovered_port = device.get("port")
+    try:
+        normalized_port = int(discovered_port)
+    except (TypeError, ValueError):
+        normalized_port = None
+
+    if normalized_port is not None and 1 <= normalized_port <= 65535:
+        flow_data["port"] = normalized_port
+
+    return flow_data
 
 
 class MarstekScanner:
